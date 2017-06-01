@@ -129,6 +129,20 @@ public class OT3Test extends TestCase {
       }
       return this;
     }
+    
+    public TestConfig clientDoDelete(int start, int end)
+        throws OperationException, TransformException {
+      return clientDoDelete(start, end, true);
+    }
+    
+    public TestConfig clientDoDelete(int start, int end, boolean flush)
+        throws OperationException, TransformException {
+      clientMock.doDelete(start, end);
+      if (flush) {
+        clientMock.flush();
+      }
+      return this;
+    }
 
     /**
      * Pretend client did some ops at the given op versions.
@@ -436,6 +450,22 @@ public class OT3Test extends TestCase {
       assertTrue(OpComparators.SYNTACTIC_IDENTITY.equal(expected, actual));
       return this;
     }
+    
+    public TestConfig printClientDoc() {
+      System.out.println(clientMock.getDoc().asOperation().getCharactersString(1));
+      return this;
+    }
+  }
+  
+  public void testGSOC() throws TransformException, OperationException {
+    TestConfig t = new TestConfig();
+    t.init(0, "<blip></blip>");
+    t.clientDoInsert(1, "Wave").clientDoInsert(5, "!!");
+    t.serverDoInsert(0, 1, "World", 1);
+    t.checkClientGotOps(0).checkClientSentOps(0).checkClientDoc("<blip>Wave!!World</blip>");
+    t.clientDoDelete(7, 7+5).serverDoInsert(1, 1, "Hello ", 6);
+    t.checkClientGotOps(0).checkClientSentOps().checkClientDoc("<blip>Wave!!Hello </blip>");
+    t.printClientDoc();
   }
 
   /**

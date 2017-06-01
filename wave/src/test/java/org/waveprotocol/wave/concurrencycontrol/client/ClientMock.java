@@ -129,6 +129,16 @@ public class ClientMock implements ConcurrencyControl.ConnectionListener {
     WaveletBlipOperation wop = new WaveletBlipOperation("blip id", blipOp);
     clientOperations.add(wop);
   }
+  
+  public void doDelete(int start, int end) throws OperationException {
+    Nindo nindo = Nindo.deleteCharacters(start, end);
+    DocOp op = doc.consumeAndReturnInvertible(nindo);
+
+    BlipContentOperation blipOp = new BlipContentOperation(
+        new WaveletOperationContext(participantId, 0L, 1), op);
+    WaveletBlipOperation wop = new WaveletBlipOperation("blip id", blipOp);
+    clientOperations.add(wop);
+  }
 
   /**
    * Pretend a client did the given op, so that when we call flush, the operation will
