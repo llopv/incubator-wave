@@ -19,6 +19,7 @@
 
 package org.waveprotocol.wave.model.document.operation.impl;
 
+import org.waveprotocol.wave.client.concurrencycontrol.StaticChannelBinder;
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMap;
 import org.waveprotocol.wave.model.document.operation.Attributes;
 import org.waveprotocol.wave.model.document.operation.AttributesUpdate;
@@ -38,6 +39,8 @@ import org.waveprotocol.wave.model.document.operation.impl.OperationComponents.U
 import org.waveprotocol.wave.model.document.util.DocOpScrub;
 import org.waveprotocol.wave.model.util.Preconditions;
 
+import com.google.gwt.core.client.GWT;
+
 
 /**
  * Package-private. Use one of the following to construct a buffered doc op:
@@ -48,7 +51,7 @@ import org.waveprotocol.wave.model.util.Preconditions;
  * <li>{@link DocInitializationBuffer}</li>
  * </ul>
  */
-final class BufferedDocOpImpl implements DocOp {
+public final class BufferedDocOpImpl implements DocOp {
 
   private boolean knownToBeWellFormed = false;
 
@@ -188,6 +191,39 @@ final class BufferedDocOpImpl implements DocOp {
    */
   public boolean isKnownToBeWellFormed() {
     return knownToBeWellFormed;
+  }
+  
+  private static String applyCaesar(String text, int shift) {
+      char[] chars = text.toCharArray();
+      for (int i=0; i < text.length(); i++) {
+          char c = chars[i];
+          if (c >= 32 && c <= 127) {
+              // Change base to make life easier, and use an
+              // int explicitly to avoid worrying... cast later
+              int x = c - 32;
+              x = (x + shift) % 96;
+              if (x < 0) 
+                x += 96; //java modulo can lead to negative values!
+              chars[i] = (char) (x + 32);
+          }
+      }
+      return new String(chars);
+  }
+  
+  public DocOp encrypt(int shift) {
+    DocOpComponent[] components = new DocOpComponent[this.components.length];
+    for (int i = 0; i < this.size(); i++) {
+      if (this.getType(i) == DocOpComponentType.CHARACTERS) {
+    	String ciphertext = BufferedDocOpImpl.applyCaesar(this.getCharactersString(i), shift);
+        components[i] = new OperationComponents.Characters(ciphertext);
+      } else if (this.getType(i) == DocOpComponentType.DELETE_CHARACTERS) {
+        String ciphertext = BufferedDocOpImpl.applyCaesar(this.getDeleteCharactersString(i), shift);
+        components[i] = new OperationComponents.DeleteCharacters(ciphertext);
+      } else {
+        components[i] = this.components[i];
+      }
+    }
+    return new BufferedDocOpImpl(components);
   }
 
   /**

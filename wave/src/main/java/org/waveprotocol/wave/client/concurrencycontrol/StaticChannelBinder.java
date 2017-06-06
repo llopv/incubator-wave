@@ -25,10 +25,17 @@ import org.waveprotocol.wave.concurrencycontrol.common.ChannelException;
 import org.waveprotocol.wave.concurrencycontrol.wave.CcDocument;
 import org.waveprotocol.wave.concurrencycontrol.wave.FlushingOperationSink;
 import org.waveprotocol.wave.concurrencycontrol.wave.OperationSucker;
+import org.waveprotocol.wave.model.document.operation.DocOp;
+import org.waveprotocol.wave.model.document.operation.impl.*;
+import org.waveprotocol.wave.model.document.operation.DocOpComponentType;
 import org.waveprotocol.wave.model.operation.SilentOperationSink;
+import org.waveprotocol.wave.model.operation.wave.BlipContentOperation;
+import org.waveprotocol.wave.model.operation.wave.BlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
 import org.waveprotocol.wave.model.util.Pair;
+
+import com.google.gwt.core.client.GWT;
 
 /**
  * Binds a wave's wavelets with supplied operation channels.
@@ -66,6 +73,23 @@ public final class StaticChannelBinder {
     OperationSucker.start(channel, asFlushing(id, sinks.first));
     sinks.second.setTarget(asOpSink(channel));
   }
+  
+  private static WaveletOperation caesar(WaveletOperation op, int shift) {
+	  if (op instanceof WaveletBlipOperation) {
+      	WaveletBlipOperation wop = (WaveletBlipOperation) op;
+      	if (wop.getBlipOp() instanceof BlipContentOperation) {
+      	  BlipContentOperation bop = (BlipContentOperation) wop.getBlipOp();
+      	  if (bop.getContentOp() instanceof BufferedDocOpImpl) {
+      		  
+      	  }
+      	  BufferedDocOpImpl dop = (BufferedDocOpImpl) bop.getContentOp();
+          dop = (BufferedDocOpImpl) dop.encrypt(shift);
+      	  bop = new BlipContentOperation(bop.getContext(), dop);
+          op = new WaveletBlipOperation(wop.getBlipId(), bop);
+      	}
+      }
+	  return op;
+  }
 
   /**
    * Adapts a regular operation sink as a flushing sink.
@@ -75,7 +99,7 @@ public final class StaticChannelBinder {
     return new FlushingOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        target.consume(op);
+        target.consume(StaticChannelBinder.caesar(op, 1));
       }
 
       @Override
@@ -91,7 +115,7 @@ public final class StaticChannelBinder {
       }
     };
   }
-
+  
   /**
    * Adapts an operation channel, making it look like an operation sink. The
    * only reason a channel is not already a sink is because it has a more
@@ -102,7 +126,7 @@ public final class StaticChannelBinder {
       @Override
       public void consume(WaveletOperation op) {
         try {
-          target.send(op);
+          target.send(StaticChannelBinder.caesar(op, -1));
         } catch (ChannelException e) {
           throw new RuntimeException("Send failed, channel is broken", e);
         }
