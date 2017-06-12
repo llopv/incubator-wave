@@ -211,12 +211,12 @@ public final class BufferedDocOpImpl implements DocOp {
       if (this.getType(i) == DocOpComponentType.ANNOTATION_BOUNDARY) {
         AnnotationBoundaryMap boundary = this.getAnnotationBoundary(i);
         for (int j = 0; j < boundary.changeSize(); j++) {
-          if (boundary.getChangeKey(j).equals("cipher")) {
+          if (boundary.getChangeKey(j).startsWith("cipher/")) {
             cipher.add(boundary.getNewValue(j));
           }
         }
         for (int j = 0; j < boundary.endSize(); j++) {
-          if (boundary.getEndKey(j).equals("cipher")) {
+          if (boundary.getEndKey(j).startsWith("cipher/")) {
             cipher.remove(cipher.size()-1);
           }
         }
@@ -230,7 +230,8 @@ public final class BufferedDocOpImpl implements DocOp {
 	return new BufferedDocOpImpl(components);
   }
   
-  public DocOp encrypt() {
+  public DocOp encrypt(long rev) {
+	String revStr = String.valueOf(rev);  
     AnnotationBoundaryMap boundary;
 	int length = this.components.length;
 	int j = 0;
@@ -242,11 +243,11 @@ public final class BufferedDocOpImpl implements DocOp {
     DocOpComponent[] components = new DocOpComponent[length];
     for (int i = 0; i < this.size(); i++) {
       if (this.getType(i) == DocOpComponentType.CHARACTERS) {
-   	    boundary = new AnnotationBoundaryMapBuilder().change("cipher", null, this.getCharactersString(i)).build();
+   	    boundary = new AnnotationBoundaryMapBuilder().change("cipher/"+revStr, null, this.getCharactersString(i)).build();
         components[j++] = new AnnotationBoundary(boundary);
     	String ciphertext = BufferedDocOpImpl.ofuscate(this.getCharactersString(i));
         components[j++] = new OperationComponents.Characters(ciphertext);
-        boundary = new AnnotationBoundaryMapBuilder().end("cipher").build();
+        boundary = new AnnotationBoundaryMapBuilder().end("cipher/"+revStr).build();
         components[j++] = new AnnotationBoundary(boundary);
       /*} else if (this.getType(i) == DocOpComponentType.DELETE_CHARACTERS) {
         String ciphertext = BufferedDocOpImpl.applyCaesar(this.getDeleteCharactersString(i), shift);

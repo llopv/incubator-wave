@@ -86,7 +86,7 @@ public final class StaticChannelBinder {
       	  if (decrypt) {
       		dop = (BufferedDocOpImpl) dop.decrypt();
       	  } else {
-      		dop = (BufferedDocOpImpl) dop.encrypt();
+      		dop = (BufferedDocOpImpl) dop.encrypt(System.currentTimeMillis());
       	  }
           
       	  bop = new BlipContentOperation(bop.getContext(), dop);
