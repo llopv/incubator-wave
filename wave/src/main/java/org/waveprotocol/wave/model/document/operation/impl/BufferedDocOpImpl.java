@@ -19,8 +19,11 @@
 
 package org.waveprotocol.wave.model.document.operation.impl;
 
+import java.util.ArrayList;
+
 import org.waveprotocol.wave.client.concurrencycontrol.StaticChannelBinder;
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMap;
+import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMapBuilder;
 import org.waveprotocol.wave.model.document.operation.Attributes;
 import org.waveprotocol.wave.model.document.operation.AttributesUpdate;
 import org.waveprotocol.wave.model.document.operation.DocOp;
@@ -193,34 +196,63 @@ public final class BufferedDocOpImpl implements DocOp {
     return knownToBeWellFormed;
   }
   
-  private static String applyCaesar(String text, int shift) {
+  private static String ofuscate(String text) {
       char[] chars = text.toCharArray();
       for (int i=0; i < text.length(); i++) {
-          char c = chars[i];
-          if (c >= 32 && c <= 127) {
-              // Change base to make life easier, and use an
-              // int explicitly to avoid worrying... cast later
-              int x = c - 32;
-              x = (x + shift) % 96;
-              if (x < 0) 
-                x += 96; //java modulo can lead to negative values!
-              chars[i] = (char) (x + 32);
-          }
+          chars[i] = '*';
       }
       return new String(chars);
   }
   
-  public DocOp encrypt(int shift) {
-    DocOpComponent[] components = new DocOpComponent[this.components.length];
-    for (int i = 0; i < this.size(); i++) {
-      if (this.getType(i) == DocOpComponentType.CHARACTERS) {
-    	String ciphertext = BufferedDocOpImpl.applyCaesar(this.getCharactersString(i), shift);
-        components[i] = new OperationComponents.Characters(ciphertext);
-      } else if (this.getType(i) == DocOpComponentType.DELETE_CHARACTERS) {
-        String ciphertext = BufferedDocOpImpl.applyCaesar(this.getDeleteCharactersString(i), shift);
-        components[i] = new OperationComponents.DeleteCharacters(ciphertext);
+  public DocOp decrypt() {
+	DocOpComponent[] components = new DocOpComponent[this.components.length];
+	ArrayList<String> cipher = new ArrayList<String>();
+	for (int i = 0; i < this.size(); i++) {
+      if (this.getType(i) == DocOpComponentType.ANNOTATION_BOUNDARY) {
+        AnnotationBoundaryMap boundary = this.getAnnotationBoundary(i);
+        for (int j = 0; j < boundary.changeSize(); j++) {
+          if (boundary.getChangeKey(j).equals("cipher")) {
+            cipher.add(boundary.getNewValue(j));
+          }
+        }
+        for (int j = 0; j < boundary.endSize(); j++) {
+          if (boundary.getEndKey(j).equals("cipher")) {
+            cipher.remove(cipher.size()-1);
+          }
+        }
+      }
+      if (this.getType(i) == DocOpComponentType.CHARACTERS && cipher.size() > 0) {
+        components[i] = new OperationComponents.Characters(cipher.get(cipher.size()-1));
       } else {
         components[i] = this.components[i];
+      }
+	}
+	return new BufferedDocOpImpl(components);
+  }
+  
+  public DocOp encrypt() {
+    AnnotationBoundaryMap boundary;
+	int length = this.components.length;
+	int j = 0;
+	for (int i = 0; i < this.size(); i++) {
+	  if (this.getType(i) == DocOpComponentType.CHARACTERS) {
+        length += 2; // Each insert characters needs annotation start and annotation end components
+	  }
+	}
+    DocOpComponent[] components = new DocOpComponent[length];
+    for (int i = 0; i < this.size(); i++) {
+      if (this.getType(i) == DocOpComponentType.CHARACTERS) {
+   	    boundary = new AnnotationBoundaryMapBuilder().change("cipher", null, this.getCharactersString(i)).build();
+        components[j++] = new AnnotationBoundary(boundary);
+    	String ciphertext = BufferedDocOpImpl.ofuscate(this.getCharactersString(i));
+        components[j++] = new OperationComponents.Characters(ciphertext);
+        boundary = new AnnotationBoundaryMapBuilder().end("cipher").build();
+        components[j++] = new AnnotationBoundary(boundary);
+      /*} else if (this.getType(i) == DocOpComponentType.DELETE_CHARACTERS) {
+        String ciphertext = BufferedDocOpImpl.applyCaesar(this.getDeleteCharactersString(i), shift);
+        components[j++] = new OperationComponents.DeleteCharacters(ciphertext);*/
+      } else {
+        components[j++] = this.components[i];
       }
     }
     return new BufferedDocOpImpl(components);

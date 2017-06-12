@@ -74,7 +74,7 @@ public final class StaticChannelBinder {
     sinks.second.setTarget(asOpSink(channel));
   }
   
-  private static WaveletOperation caesar(WaveletOperation op, int shift) {
+  private static WaveletOperation cipherWrapper(WaveletOperation op, boolean decrypt) {
 	  if (op instanceof WaveletBlipOperation) {
       	WaveletBlipOperation wop = (WaveletBlipOperation) op;
       	if (wop.getBlipOp() instanceof BlipContentOperation) {
@@ -83,7 +83,12 @@ public final class StaticChannelBinder {
       		  
       	  }
       	  BufferedDocOpImpl dop = (BufferedDocOpImpl) bop.getContentOp();
-          dop = (BufferedDocOpImpl) dop.encrypt(shift);
+      	  if (decrypt) {
+      		dop = (BufferedDocOpImpl) dop.decrypt();
+      	  } else {
+      		dop = (BufferedDocOpImpl) dop.encrypt();
+      	  }
+          
       	  bop = new BlipContentOperation(bop.getContext(), dop);
           op = new WaveletBlipOperation(wop.getBlipId(), bop);
       	}
@@ -99,7 +104,7 @@ public final class StaticChannelBinder {
     return new FlushingOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        target.consume(StaticChannelBinder.caesar(op, 1));
+        target.consume(StaticChannelBinder.cipherWrapper(op, true));
       }
 
       @Override
@@ -126,7 +131,7 @@ public final class StaticChannelBinder {
       @Override
       public void consume(WaveletOperation op) {
         try {
-          target.send(StaticChannelBinder.caesar(op, -1));
+          target.send(StaticChannelBinder.cipherWrapper(op, false));
         } catch (ChannelException e) {
           throw new RuntimeException("Send failed, channel is broken", e);
         }
