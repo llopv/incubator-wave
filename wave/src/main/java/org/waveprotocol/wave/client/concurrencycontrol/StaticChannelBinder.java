@@ -75,25 +75,25 @@ public final class StaticChannelBinder {
   }
   
   private static WaveletOperation cipherWrapper(WaveletOperation op, boolean decrypt) {
-	  if (op instanceof WaveletBlipOperation) {
-      	WaveletBlipOperation wop = (WaveletBlipOperation) op;
-      	if (wop.getBlipOp() instanceof BlipContentOperation) {
-      	  BlipContentOperation bop = (BlipContentOperation) wop.getBlipOp();
-      	  if (bop.getContentOp() instanceof BufferedDocOpImpl) {
-      		  
-      	  }
-      	  BufferedDocOpImpl dop = (BufferedDocOpImpl) bop.getContentOp();
-      	  if (decrypt) {
-      		dop = (BufferedDocOpImpl) dop.decrypt();
-      	  } else {
-      		dop = (BufferedDocOpImpl) dop.encrypt(System.currentTimeMillis());
-      	  }
-          
-      	  bop = new BlipContentOperation(bop.getContext(), dop);
-          op = new WaveletBlipOperation(wop.getBlipId(), bop);
-      	}
+    if (op instanceof WaveletBlipOperation) {
+      WaveletBlipOperation wop = (WaveletBlipOperation) op;
+      if (wop.getBlipOp() instanceof BlipContentOperation) {
+        BlipContentOperation bop = (BlipContentOperation) wop.getBlipOp();
+        if (bop.getContentOp() instanceof BufferedDocOpImpl) {
+
+        }
+        BufferedDocOpImpl dop = (BufferedDocOpImpl) bop.getContentOp();
+        if (decrypt) {
+          dop = (BufferedDocOpImpl) dop.decrypt();
+        } else {
+          dop = (BufferedDocOpImpl) dop.encrypt(System.currentTimeMillis());
+        }
+
+        bop = new BlipContentOperation(bop.getContext(), dop);
+        op = new WaveletBlipOperation(wop.getBlipId(), bop);
       }
-	  return op;
+    }
+    return op;
   }
 
   /**

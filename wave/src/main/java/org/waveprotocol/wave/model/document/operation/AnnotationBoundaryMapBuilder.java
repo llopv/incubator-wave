@@ -42,6 +42,19 @@ public final class AnnotationBoundaryMapBuilder {
 
   public AnnotationBoundaryMapBuilder() {}
 
+  public AnnotationBoundaryMapBuilder boundary(AnnotationBoundaryMap boundary) {
+    for (int i = 0; i < boundary.changeSize(); i++) {
+      String key = boundary.getChangeKey(i);
+      String oldValue = boundary.getOldValue(i);
+      String newValue = boundary.getNewValue(i);
+      this.change(key, oldValue, newValue);
+    }
+    for (int i = 0; i < boundary.endSize(); i++) {
+      this.end(boundary.getEndKey(i));
+    }
+    return this;
+  }
+  
   /**
    * Adds an end of the given key to the boundary map under construction.  This
    * overrides any previous calls to change() with that key.
