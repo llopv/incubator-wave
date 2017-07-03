@@ -26,6 +26,7 @@ import java.util.Arrays;
 import org.waveprotocol.wave.model.document.operation.Attributes;
 import org.waveprotocol.wave.model.document.operation.DocOp;
 import org.waveprotocol.wave.model.document.operation.algorithm.Composer;
+import org.waveprotocol.wave.model.document.operation.algorithm.DocOpInverter;
 import org.waveprotocol.wave.model.operation.OperationException;
 
 public class DocOpUtilTest extends TestCase {
@@ -129,9 +130,12 @@ public class DocOpUtilTest extends TestCase {
     return (BufferedDocOpImpl) Composer.compose(Arrays.asList(rev));
   }
 
-  private void printXML(DocOp dop) {
+  private String getXML(DocOp dop) {
     assert (DocOpValidator.isWellFormed(null, dop));
-    // System.out.print(DocOpUtil.toXmlString(DocOpUtil.asInitialization(dop)));
+    return DocOpUtil.toXmlString(DocOpUtil.asInitialization(dop));
+  }
+  private void printXML(DocOp dop) {
+    System.out.print(getXML(dop));
   }
 
   public void testGSOC1() throws OperationException {
@@ -143,7 +147,7 @@ public class DocOpUtilTest extends TestCase {
   public void testGSOC2() throws OperationException {
     DocOp[] rev = { SOME_TEXT, MORE };
     encryptAndCompose(rev).decryptSnapshot();
-    printXML(encryptAndCompose(rev).decryptSnapshot());
+    getXML(encryptAndCompose(rev).decryptSnapshot());
   }
 
   public void testGSOC3() throws OperationException {
@@ -164,7 +168,7 @@ public class DocOpUtilTest extends TestCase {
       }
     }.finish();
     Composer.compose(op1, op2);
-    printXML(Composer.compose(op1, op2));
+    getXML(Composer.compose(op1, op2));
   }
 
   public void testGSOC4() throws OperationException {
@@ -176,7 +180,7 @@ public class DocOpUtilTest extends TestCase {
     }.finish();
     DocOp[] rev = { SOME_TEXT, THERE_IS };
     encryptAndCompose(rev).decryptSnapshot();
-    printXML(encryptAndCompose(rev).decryptSnapshot());
+    getXML(encryptAndCompose(rev).decryptSnapshot());
   }
 
   public void testGSOC5() throws OperationException {
@@ -184,13 +188,13 @@ public class DocOpUtilTest extends TestCase {
     BufferedDocOpImpl doc = encryptDecryptAndCompose(rev);
     // DELETE_SOME.encrypt(2, doc);
 
-    printXML(doc);
+    getXML(doc);
   }
 
   public void testGSOC6() throws OperationException {
     DocOp[] rev = { TEST_DOC1 };
     encryptAndDecrypt(rev);
-    printXML(encryptAndDecrypt(rev)[0]);
+    getXML(encryptAndDecrypt(rev)[0]);
 
   }
 
@@ -213,7 +217,7 @@ public class DocOpUtilTest extends TestCase {
       }
     }.finish();
 
-    printXML(Composer.compose(ANNOT, ANNOT2));
+    getXML(Composer.compose(ANNOT, ANNOT2));
   }
 
   public void testDeletion() throws OperationException {
@@ -235,7 +239,7 @@ public class DocOpUtilTest extends TestCase {
       }
     }.finish();
     DocOp[] rev = { ANNOT, DEL };
-    printXML(encryptDecryptAndCompose(rev));
+    getXML(encryptDecryptAndCompose(rev));
   }
 
   public void xtestDel() throws OperationException {
@@ -270,5 +274,28 @@ public class DocOpUtilTest extends TestCase {
     }.finish();
     // System.out.println(Composer.compose(DELETE_SOME, SOME_DEL_ANN));
     // System.out.println(Composer.compose(DEL, DEL_A));
+  }
+  
+  public void testInvertTwice() throws OperationException {
+    final BufferedDocOpImpl X = (BufferedDocOpImpl) new DocOpBuffer() {
+      {
+        annotationBoundary(AnnotationBoundaryMapImpl.builder().updateValues("x", "1", "2", "y", "1", "2").build());
+        deleteCharacters("b");
+        annotationBoundary(AnnotationBoundaryMapImpl.builder().initializationEnd("x", "y").build());
+      }
+    }.finish();
+    BufferedDocOpImpl withIns = (BufferedDocOpImpl) X.encrypt(0, false);
+    withIns = (BufferedDocOpImpl) DocOpInverter.invert(withIns);
+    BufferedDocOpImpl withDel = (BufferedDocOpImpl) withIns.encrypt(0, true);
+    withDel = (BufferedDocOpImpl) DocOpInverter.invert(withDel);
+    System.out.println(withDel.getAnnotationBoundary(0).getOldValue(0));
+    withDel = (BufferedDocOpImpl) withDel.clone();
+    System.out.println(DocOpInverter.invert(DocOpInverter.invert(X)).getAnnotationBoundary(0).getOldValue(1));
+  }
+  
+  public void testDecryptSnapshot1() throws OperationException {
+    DocOp[] rev = { SOME_TEXT, MORE, DELETE_SOME };
+    printXML(encryptAndCompose(rev));
+    //printXML(encryptAndCompose(rev).decryptSnapshot());
   }
 }
