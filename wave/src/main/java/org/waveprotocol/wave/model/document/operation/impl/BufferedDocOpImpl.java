@@ -20,11 +20,13 @@
 package org.waveprotocol.wave.model.document.operation.impl;
 
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMap;
+import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMapBuilder;
 import org.waveprotocol.wave.model.document.operation.Attributes;
 import org.waveprotocol.wave.model.document.operation.AttributesUpdate;
 import org.waveprotocol.wave.model.document.operation.DocOp;
 import org.waveprotocol.wave.model.document.operation.DocOpComponentType;
 import org.waveprotocol.wave.model.document.operation.DocOpCursor;
+import org.waveprotocol.wave.model.document.operation.algorithm.DocOpCollector;
 import org.waveprotocol.wave.model.document.operation.automaton.DocOpAutomaton.ViolationCollector;
 import org.waveprotocol.wave.model.document.operation.impl.OperationComponents.AnnotationBoundary;
 import org.waveprotocol.wave.model.document.operation.impl.OperationComponents.Characters;
@@ -48,7 +50,7 @@ import org.waveprotocol.wave.model.util.Preconditions;
  * <li>{@link DocInitializationBuffer}</li>
  * </ul>
  */
-final class BufferedDocOpImpl implements DocOp {
+public final class BufferedDocOpImpl implements DocOp {
 
   private boolean knownToBeWellFormed = false;
 
@@ -180,6 +182,92 @@ final class BufferedDocOpImpl implements DocOp {
   public AttributesUpdate getUpdateAttributesUpdate(int i) {
     check(i, DocOpComponentType.UPDATE_ATTRIBUTES);
     return ((UpdateAttributes) components[i]).update;
+  }
+
+  public DocOp encrypt(long rev) {
+    DocOpComponent[] components = new DocOpComponent[this.components.length];
+    String buffer = "";
+    int count = 0;
+    boolean annotationNeeded = false;
+    for (int i = 0; i < this.size(); i++) {
+      boolean inserting = this.getType(i) == DocOpComponentType.CHARACTERS;
+      boolean deleting = this.getType(i) == DocOpComponentType.DELETE_CHARACTERS;
+      if (inserting || deleting) {
+        String text = inserting ? this.getCharactersString(i) : this.getDeleteCharactersString(i);
+        String ofusc = BufferedDocOpImpl.ofuscate(text);
+        buffer += inserting ? text : "";
+        if (inserting) {
+          annotationNeeded = true;
+          components[i] = new OperationComponents.Characters(ofusc);
+        } else {
+          components[i] = new OperationComponents.DeleteCharacters(ofusc);
+        }
+      } else {
+        components[i] = this.components[i];
+      }
+      count += cursorIncrement(i);
+    }
+    
+    if (annotationNeeded) {
+      String annotTag = "cipher/" + String.valueOf(rev);
+      DocOpComponent[] annotation = new DocOpComponent[3];
+      AnnotationBoundaryMap boundary = new AnnotationBoundaryMapBuilder().change(annotTag, null, buffer).build();
+      annotation[0] = new AnnotationBoundary(boundary);
+      annotation[1] = new Retain(count);
+      boundary = new AnnotationBoundaryMapBuilder().end(annotTag).build();
+      annotation[2] = new AnnotationBoundary(boundary);
+      
+      DocOpCollector collector = new DocOpCollector();
+      collector.add(new BufferedDocOpImpl(components));
+      collector.add(new BufferedDocOpImpl(annotation));
+      return collector.composeAll();
+    } else {
+      return new BufferedDocOpImpl(components);
+    }
+  }
+  
+  public DocOp decrypt() {
+    DocOpComponent[] components = new DocOpComponent[this.components.length];
+    String buffer = "";
+    for (int i = 0; i < this.size(); i++) {
+      if (this.getType(i) == DocOpComponentType.ANNOTATION_BOUNDARY) {
+        AnnotationBoundaryMap boundary = this.getAnnotationBoundary(i);
+        for (int j = 0; j < boundary.changeSize(); j++) {
+          if (boundary.getChangeKey(j).startsWith("cipher/")) {
+            buffer += boundary.getNewValue(j);
+          }
+        }
+      }
+      if (this.getType(i) == DocOpComponentType.CHARACTERS && buffer.length() > 0) {
+        String text = buffer.substring(0, this.getCharactersString(i).length());
+        components[i] = new OperationComponents.Characters(text);
+        buffer = buffer.substring(this.getCharactersString(i).length());
+      } else {
+        components[i] = this.components[i];
+      }
+    }
+    return new BufferedDocOpImpl(components);
+  }
+  
+  private static String ofuscate(String text) {
+    char[] chars = text.toCharArray();
+    for (int i = 0; i < text.length(); i++) {
+      chars[i] = '*';
+    }
+    return new String(chars);
+  }
+
+  private int cursorIncrement(int i) {
+    DocOpComponentType type = this.getType(i);
+    if (type == DocOpComponentType.RETAIN) {
+      return this.getRetainItemCount(i);
+    } else if (type == DocOpComponentType.CHARACTERS) {
+      return this.getCharactersString(i).length();
+    } else if (type == DocOpComponentType.ELEMENT_START || type == DocOpComponentType.ELEMENT_END) {
+      return 1;
+    } else {
+      return 0;
+    }
   }
 
   /**
