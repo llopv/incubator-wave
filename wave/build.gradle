@@ -310,6 +310,7 @@ task compileGwt {
                     "-XdisableClassMetadata",
                     "-XdisableCastChecking",
                     "-localWorkers", "4",
+                    "-generateJsInteropExports",
                     "org.waveprotocol.box.webclient.WebClientProd"
             ]
         }
@@ -356,6 +357,7 @@ task compileGwtDev {
                     "-draftCompile",
                     "-ea",
                     "-strict",
+                    "-generateJsInteropExports",
                     "org.waveprotocol.box.webclient.WebClientDev"
             ]
         }
@@ -363,7 +365,7 @@ task compileGwtDev {
 }
 
 
-run.dependsOn compileGwt
+// run.dependsOn compileGwt
 compileJava.dependsOn = [generateMessages, generateGXP]
 
 /* Gwt Dev Tasks */
@@ -394,6 +396,7 @@ task gwtDev {
                     "-bindAddress", "127.0.0.1",
                     "-startupUrl", "http://localhost:9898",
                     "-logLevel", "DEBUG",
+                    "-generateJsInteropExports",
                     "org.waveprotocol.box.webclient.WebClientDev",
             ]
         }

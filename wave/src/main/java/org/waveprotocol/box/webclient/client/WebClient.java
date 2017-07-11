@@ -184,7 +184,7 @@ public class WebClient implements EntryPoint {
             if (channel == null) {
               throw new RuntimeException("Spaghetti attack.  Create occured before login");
             }
-            openWave(WaveRef.of(idGenerator.newWaveId()), true, participantSet);
+            openWave(null, WaveRef.of(idGenerator.newWaveId()), true, participantSet);
           }
         });
 
@@ -260,8 +260,8 @@ public class WebClient implements EntryPoint {
     // Handles opening waves.
     ClientEvents.get().addWaveSelectionEventHandler(new WaveSelectionEventHandler() {
       @Override
-      public void onSelection(WaveRef waveRef) {
-        openWave(waveRef, false, null);
+      public void onSelection(WaveRef waveRef, String key) {
+        openWave(key, waveRef, false, null);
       }
     });
   }
@@ -353,15 +353,48 @@ public class WebClient implements EntryPoint {
     channel = new RemoteViewServiceMultiplexer(websocket, loggedInUser.getAddress());
   }
 
+  
+  private void openWave(String key, WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
+	  
+	  WaveCryptoManager.Callback<String, Object> openCallback = new WaveCryptoManager.Callback<String, Object>() {
+
+		@Override
+		public void onSuccess(String key) {
+			openWaveWithKey(key, waveRef, isNewWave, participants);			
+		}
+
+		@Override
+		public void onFailure(Object reason) {
+			Window.alert("Key is not valid!\n\n "+ (reason != null ? reason.toString() : ""));
+		}
+		  		  
+	  };
+	  
+	  if (!isNewWave) {
+			
+			if (key == null || key.isEmpty())
+				key = Window.prompt("Enter key", "");
+			
+			WaveCryptoManager.get().registerKey(waveRef.getWaveId(), key, openCallback);
+			
+			
+	} else {
+
+		WaveCryptoManager.get().generateKey(waveRef.getWaveId(), openCallback);
+	}
+	
+  }
+  
   /**
    * Shows a wave in a wave panel.
    *
+   * @param crypto key
    * @param waveRef wave id to open
    * @param isNewWave whether the wave is being created by this client session.
    * @param participants the participants to add to the newly created wave.
    *        {@code null} if only the creator should be added
    */
-  private void openWave(WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
+  private void openWaveWithKey(String key, WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
     final org.waveprotocol.box.stat.Timer timer = Timing.startRequest("Open Wave");
     LOG.info("WebClient.openWave()");
 
@@ -369,7 +402,7 @@ public class WebClient implements EntryPoint {
       wave.destroy();
       wave = null;
     }
-
+    
     // Release the display:none.
     UIObject.setVisible(waveFrame.getElement(), true);
     waveHolder.getElement().appendChild(loading);
@@ -401,8 +434,14 @@ public class WebClient implements EntryPoint {
         return;
       }
     }
-    History.newItem(GwtWaverefEncoder.encodeToUriPathSegment(waveRef), false);
+    History.newItem(GwtWaverefEncoder.encodeToUriPathSegment(waveRef)+"/"+key, false);
   }
+  
+  
+  
+  
+  
+  
 
   /**
    * An exception handler that reports exceptions using a <em>shiny banner</em>

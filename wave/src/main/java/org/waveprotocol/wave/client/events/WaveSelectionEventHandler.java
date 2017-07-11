@@ -24,5 +24,5 @@ import com.google.gwt.event.shared.EventHandler;
 import org.waveprotocol.wave.model.waveref.WaveRef;
 
 public abstract class WaveSelectionEventHandler implements EventHandler {
-  public abstract void onSelection(WaveRef id);
+  public abstract void onSelection(WaveRef id, String key);
 }

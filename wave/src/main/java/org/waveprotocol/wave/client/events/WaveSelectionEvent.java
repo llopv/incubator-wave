@@ -26,11 +26,18 @@ import org.waveprotocol.wave.model.waveref.WaveRef;
 public class WaveSelectionEvent extends GwtEvent<WaveSelectionEventHandler> {
   public static final GwtEvent.Type<WaveSelectionEventHandler> TYPE = new GwtEvent.Type<WaveSelectionEventHandler>();
   private final WaveRef waveRef;
+  private final String key;
 
   public WaveSelectionEvent(WaveRef waveRef) {
     this.waveRef = Preconditions.checkNotNull(waveRef,"null waveref");
+    this.key = null;
   }
 
+  public WaveSelectionEvent(WaveRef waveRef, String key) {
+	    this.waveRef = Preconditions.checkNotNull(waveRef,"null waveref");
+	    this.key = key;
+  }
+  
   @Override
   public Type<WaveSelectionEventHandler> getAssociatedType() {
     return TYPE;
@@ -38,7 +45,12 @@ public class WaveSelectionEvent extends GwtEvent<WaveSelectionEventHandler> {
 
   @Override
   protected void dispatch(WaveSelectionEventHandler handler) {
-    handler.onSelection(waveRef);
+    handler.onSelection(waveRef, key);
   }
+
+public String getKey() {
+	return key;
+}
+   
 
 }
