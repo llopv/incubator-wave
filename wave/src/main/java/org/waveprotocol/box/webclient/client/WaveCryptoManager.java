@@ -11,7 +11,6 @@ import org.waveprotocol.box.webclient.client.jsinterop.JsonWebKeyImpl;
 import org.waveprotocol.box.webclient.client.jsinterop.NativeWindow;
 import org.waveprotocol.wave.model.id.WaveId;
 
-import com.google.gwt.typedarrays.client.JsUtils;
 import com.google.gwt.typedarrays.client.Uint8ArrayNative;
 import com.google.gwt.typedarrays.shared.ArrayBuffer;
 import com.google.gwt.typedarrays.shared.Uint8Array;
@@ -75,6 +74,13 @@ public class WaveCryptoManager {
 		return bytes.buffer();
 	}
 	
+	public static ArrayBuffer stringToArrayBuffer(String text) {
+	  return new NativeWindow.TextEncoder().encode(text);
+	}
+
+	public static String arrayBufferToString(ArrayBuffer buffer) {
+	  return new NativeWindow.TextDecoder().decode(buffer);
+	}
 	
 	public static final WaveId DEFAULT_WAVE_ID = WaveId.of("local.net", "XXXXXX");
 	
@@ -127,10 +133,10 @@ public class WaveCryptoManager {
 			@Override
 			public void encrypt(String plaintext,  String additionalDataStr, Callback<String, Object> callback) {
 				
-				ArrayBuffer data = JsUtils.arrayBufferFromString(plaintext);
+				ArrayBuffer data = stringToArrayBuffer(plaintext);
 		
 				ArrayBuffer iv = Crypto.getRandomValues(Uint8ArrayNative.create(12));
-				ArrayBuffer additionalData = JsUtils.arrayBufferFromString(additionalDataStr);
+				ArrayBuffer additionalData = stringToArrayBuffer(additionalDataStr);
 				
 				AlgorithmIdentifier algorithm = new AlgorithmIdentifier(CRYPTO_ALGORITHM_NAME, iv, additionalData);  
 				
@@ -161,7 +167,7 @@ public class WaveCryptoManager {
 
 				Crypto.subtle.decrypt(algorithm, cryptoKey, data).then(
 					(ArrayBuffer buffer) -> {	
-						callback.onSuccess(JsUtils.stringFromArrayBuffer(buffer));
+						callback.onSuccess(arrayBufferToString(buffer));
 					},
 					(Object reason) -> {
 						callback.onFailure(reason);
