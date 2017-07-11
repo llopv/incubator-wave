@@ -284,9 +284,9 @@ public class DocOpUtilTest extends TestCase {
         annotationBoundary(AnnotationBoundaryMapImpl.builder().initializationEnd("x", "y").build());
       }
     }.finish();
-    BufferedDocOpImpl withIns = (BufferedDocOpImpl) X.encrypt(0, false);
+    BufferedDocOpImpl withIns = (BufferedDocOpImpl) X.encrypt(0);
     withIns = (BufferedDocOpImpl) DocOpInverter.invert(withIns);
-    BufferedDocOpImpl withDel = (BufferedDocOpImpl) withIns.encrypt(0, true);
+    BufferedDocOpImpl withDel = (BufferedDocOpImpl) withIns.encrypt(0);
     withDel = (BufferedDocOpImpl) DocOpInverter.invert(withDel);
     System.out.println(withDel.getAnnotationBoundary(0).getOldValue(0));
     withDel = (BufferedDocOpImpl) withDel.clone();

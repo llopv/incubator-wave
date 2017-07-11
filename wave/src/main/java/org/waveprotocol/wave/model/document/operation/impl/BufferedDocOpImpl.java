@@ -33,6 +33,7 @@ import org.waveprotocol.wave.model.document.operation.DocOp;
 import org.waveprotocol.wave.model.document.operation.DocOpComponentType;
 import org.waveprotocol.wave.model.document.operation.DocOpCursor;
 import org.waveprotocol.wave.model.document.operation.algorithm.Composer;
+import org.waveprotocol.wave.model.document.operation.algorithm.DocOpCollector;
 import org.waveprotocol.wave.model.document.operation.algorithm.DocOpInverter;
 import org.waveprotocol.wave.model.document.operation.automaton.DocOpAutomaton.ViolationCollector;
 import org.waveprotocol.wave.model.document.operation.impl.OperationComponents.AnnotationBoundary;
@@ -321,34 +322,23 @@ public final class BufferedDocOpImpl implements DocOp {
 
   public DocOp decrypt() {
     DocOpComponent[] components = new DocOpComponent[this.components.length];
-    ArrayList<String> insertions = new ArrayList<String>();
-    ArrayList<String> deletions = new ArrayList<String>();
+    String buffer = "";
     for (int i = 0; i < this.size(); i++) {
       if (this.getType(i) == DocOpComponentType.ANNOTATION_BOUNDARY) {
         AnnotationBoundaryMap boundary = this.getAnnotationBoundary(i);
         for (int j = 0; j < boundary.changeSize(); j++) {
-          if (boundary.getChangeKey(j).startsWith("cipher/add/")) {
-            insertions.add(boundary.getNewValue(j));
-          }
-          if (boundary.getChangeKey(j).startsWith("cipher/del/")) {
-            deletions.add(boundary.getNewValue(j));
+          if (boundary.getChangeKey(j).startsWith("cipher/")) {
+            buffer += boundary.getNewValue(j);
           }
         }
-        /*for (int j = 0; j < boundary.endSize(); j++) {
-          if (boundary.getEndKey(j).startsWith("cipher/add/")) {
-            insertions.remove(insertions.size() - 1);
-          }
-          if (boundary.getEndKey(j).startsWith("cipher/del/")) {
-            insertions.remove(deletions.size() - 1);
-          }
-        }*/
-        
       }
-      if (this.getType(i) == DocOpComponentType.CHARACTERS && insertions.size() > 0) {
-        components[i] = new OperationComponents.Characters(insertions.get(insertions.size() - 1));
-      } else if (this.getType(i) == DocOpComponentType.DELETE_CHARACTERS && deletions.size() > 0) {
-        components[i] = new OperationComponents.DeleteCharacters(deletions.get(deletions.size() - 1));
-      } else {
+      if (this.getType(i) == DocOpComponentType.CHARACTERS && buffer.length() > 0) {
+        components[i] = new OperationComponents.Characters(buffer.substring(0, this.getCharactersString(i).length()));
+        buffer = buffer.substring(this.getCharactersString(i).length());
+      /*} else if (this.getType(i) == DocOpComponentType.DELETE_CHARACTERS && buffer.length() > 0) {
+        components[i] = new OperationComponents.DeleteCharacters(buffer.substring(0, this.getDeleteCharactersString(i).length()));
+        buffer = buffer.substring(this.getDeleteCharactersString(i).length());
+      */} else {
         components[i] = this.components[i];
       }
     }
@@ -404,7 +394,7 @@ public final class BufferedDocOpImpl implements DocOp {
     return new BufferedDocOpImpl(components.toArray(new DocOpComponent[0]));
   }*/
   
-  public DocOp encrypt(long rev) {
+  /*public DocOp encrypt(long rev) {
     BufferedDocOpImpl dop = (BufferedDocOpImpl) encrypt(rev, false);
     dop = (BufferedDocOpImpl) DocOpInverter.invert(dop);
     dop = (BufferedDocOpImpl) dop.encrypt(rev, true);
@@ -465,6 +455,48 @@ public final class BufferedDocOpImpl implements DocOp {
       e.printStackTrace();
     }
     return null;
+  }*/
+  
+  public DocOp encrypt(long rev) {
+    DocOpComponent[] components = new DocOpComponent[this.components.length];
+    String buffer = "";
+    int count = 0;
+    boolean annotationNeeded = false;
+    for (int i = 0; i < this.size(); i++) {
+      boolean inserting = this.getType(i) == DocOpComponentType.CHARACTERS;
+      boolean deleting = this.getType(i) == DocOpComponentType.DELETE_CHARACTERS;
+      if (inserting || deleting) {
+        String text = inserting ? this.getCharactersString(i) : this.getDeleteCharactersString(i);
+        String ofusc = BufferedDocOpImpl.ofuscate(text);
+        buffer += inserting ? text : "";
+        if (inserting) {
+          annotationNeeded = true;
+          components[i] = new OperationComponents.Characters(ofusc);
+        } else {
+          components[i] = new OperationComponents.DeleteCharacters(ofusc);
+        }
+      } else {
+        components[i] = this.components[i];
+      }
+      count += cursorIncrement(i);
+    }
+    
+    if (annotationNeeded) {
+      String annotTag = "cipher/" + String.valueOf(rev);
+      DocOpComponent[] annotation = new DocOpComponent[3];
+      AnnotationBoundaryMap boundary = new AnnotationBoundaryMapBuilder().change(annotTag, null, buffer).build();
+      annotation[0] = new AnnotationBoundary(boundary);
+      annotation[1] = new Retain(count);
+      boundary = new AnnotationBoundaryMapBuilder().end(annotTag).build();
+      annotation[2] = new AnnotationBoundary(boundary);
+      
+      DocOpCollector collector = new DocOpCollector();
+      collector.add(new BufferedDocOpImpl(components));
+      collector.add(new BufferedDocOpImpl(annotation));
+      return collector.composeAll();
+    } else {
+      return new BufferedDocOpImpl(components);
+    }
   }
   
   public DocOp clone() {
