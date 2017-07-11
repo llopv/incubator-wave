@@ -25,7 +25,9 @@ import org.waveprotocol.wave.concurrencycontrol.common.ChannelException;
 import org.waveprotocol.wave.concurrencycontrol.wave.CcDocument;
 import org.waveprotocol.wave.concurrencycontrol.wave.FlushingOperationSink;
 import org.waveprotocol.wave.concurrencycontrol.wave.OperationSucker;
+import org.waveprotocol.wave.model.document.operation.impl.BufferedDocOpImpl;
 import org.waveprotocol.wave.model.operation.SilentOperationSink;
+import org.waveprotocol.wave.model.operation.wave.BlipContentOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
 import org.waveprotocol.wave.model.util.Pair;
@@ -66,6 +68,28 @@ public final class StaticChannelBinder {
     OperationSucker.start(channel, asFlushing(id, sinks.first));
     sinks.second.setTarget(asOpSink(channel));
   }
+  
+  private static WaveletOperation cipherWrapper(WaveletOperation op, boolean decrypt) {
+    if (op instanceof WaveletBlipOperation) {
+      WaveletBlipOperation wop = (WaveletBlipOperation) op;
+      if (wop.getBlipOp() instanceof BlipContentOperation) {
+        BlipContentOperation bop = (BlipContentOperation) wop.getBlipOp();
+        if (bop.getContentOp() instanceof BufferedDocOpImpl) {
+
+        }
+        BufferedDocOpImpl dop = (BufferedDocOpImpl) bop.getContentOp();
+        if (decrypt) {
+          dop = (BufferedDocOpImpl) dop.decrypt();
+        } else {
+          dop = (BufferedDocOpImpl) dop.encrypt(System.currentTimeMillis());
+        }
+
+        bop = new BlipContentOperation(bop.getContext(), dop);
+        op = new WaveletBlipOperation(wop.getBlipId(), bop);
+      }
+    }
+    return op;
+  }
 
   /**
    * Adapts a regular operation sink as a flushing sink.
@@ -75,7 +99,7 @@ public final class StaticChannelBinder {
     return new FlushingOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        target.consume(op);
+        target.consume(StaticChannelBinder.cipherWrapper(op, true));
       }
 
       @Override
@@ -102,7 +126,7 @@ public final class StaticChannelBinder {
       @Override
       public void consume(WaveletOperation op) {
         try {
-          target.send(op);
+          target.send(StaticChannelBinder.cipherWrapper(op, false));
         } catch (ChannelException e) {
           throw new RuntimeException("Send failed, channel is broken", e);
         }
