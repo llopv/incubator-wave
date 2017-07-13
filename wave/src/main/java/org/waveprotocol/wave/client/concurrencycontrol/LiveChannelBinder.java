@@ -31,6 +31,7 @@ import org.waveprotocol.wave.concurrencycontrol.common.CorruptionDetail;
 import org.waveprotocol.wave.concurrencycontrol.wave.CcDocument;
 import org.waveprotocol.wave.model.id.IdFilter;
 import org.waveprotocol.wave.model.id.ModernIdSerialiser;
+import org.waveprotocol.wave.model.id.WaveId;
 import org.waveprotocol.wave.model.id.WaveletId;
 import org.waveprotocol.wave.model.util.CollectionUtils;
 import org.waveprotocol.wave.model.util.StringMap;
@@ -153,9 +154,10 @@ public final class LiveChannelBinder
 
   @Override
   public void onWaveletAdded(ObservableWavelet wavelet) {
-    String id = ModernIdSerialiser.INSTANCE.serialiseWaveletId(wavelet.getId());
-    if (channels.containsKey(id)) {
-      connect(id);
+    String waveId = ModernIdSerialiser.INSTANCE.serialiseWaveId(wavelet.getWaveId());
+    String waveletId = ModernIdSerialiser.INSTANCE.serialiseWaveletId(wavelet.getId());
+    if (channels.containsKey(waveletId)) {
+      connect(waveId, waveletId);
     } else {
       // This will trigger the onOperationChannelCreated callback below.
       mux.createOperationChannel(wavelet.getId(), wavelet.getCreatorId());
@@ -165,14 +167,17 @@ public final class LiveChannelBinder
   @Override
   public void onOperationChannelCreated(
       OperationChannel channel, ObservableWaveletData snapshot, Accessibility accessibility) {
+    WaveId id = snapshot.getWaveId();
     WaveletId wid = snapshot.getWaveletId();
-    String id = ModernIdSerialiser.INSTANCE.serialiseWaveletId(wid);
+    
+    String waveId = ModernIdSerialiser.INSTANCE.serialiseWaveId(id);
+    String waveletId = ModernIdSerialiser.INSTANCE.serialiseWaveletId(wid);
 
-    Preconditions.checkState(!channels.containsKey(id));
-    channels.put(id, channel);
+    Preconditions.checkState(!channels.containsKey(waveletId));
+    channels.put(waveletId, channel);
 
     if (wave.getWavelet(wid) != null) {
-      connect(id);
+      connect(waveId, waveletId);
     } else {
       // This will trigger the onWaveletAdded callback above.
       wave.addWavelet(operationalizer.operationalize(snapshot));
@@ -189,8 +194,8 @@ public final class LiveChannelBinder
     // TODO
   }
 
-  private void connect(String id) {
-    binder.bind(id, removeAndReturn(channels, id));
+  private void connect(String waveId, String waveletId) {
+    binder.bind(waveId, waveletId, removeAndReturn(channels, waveletId));
   }
 
   // Something that should have been on StringMap from the beginning.

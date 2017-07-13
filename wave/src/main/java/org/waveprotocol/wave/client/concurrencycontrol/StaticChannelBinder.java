@@ -19,6 +19,7 @@
 
 package org.waveprotocol.wave.client.concurrencycontrol;
 
+import org.waveprotocol.box.webclient.client.WaveCryptoManager;
 import org.waveprotocol.wave.client.wave.WaveDocuments;
 import org.waveprotocol.wave.concurrencycontrol.channel.OperationChannel;
 import org.waveprotocol.wave.concurrencycontrol.common.ChannelException;
@@ -40,6 +41,7 @@ public final class StaticChannelBinder {
 
   private final WaveletOperationalizer operationalizer;
   private final WaveDocuments<? extends CcDocument> docRegistry;
+  private static WaveCryptoManager crypto = new WaveCryptoManager();
 
   /**
    * Creates a binder for a wave.
@@ -57,26 +59,31 @@ public final class StaticChannelBinder {
    * Connects a wavelet's operation sinks with an operation channel.
    *
    * @param id id of the wavelet to bind
+   * @param waveletId 
    * @param channel channel to bind
    */
-  public void bind(String id, OperationChannel channel) {
+  public void bind(String waveId, String waveletId, OperationChannel channel) {
     Pair<SilentOperationSink<WaveletOperation>, ProxyOperationSink<WaveletOperation>> sinks =
-        operationalizer.getSinks(id);
+        operationalizer.getSinks(waveletId);
 
     // Bind the two ends together.
-    OperationSucker.start(channel, asFlushing(id, sinks.first));
-    sinks.second.setTarget(asOpSink(channel));
+    OperationSucker.start(channel, asFlushing(waveId, waveletId, sinks.first));
+    sinks.second.setTarget(asOpSink(channel, waveId, waveletId));
   }
 
   /**
    * Adapts a regular operation sink as a flushing sink.
+   * @param waveletId2 
    */
   private FlushingOperationSink<WaveletOperation> asFlushing(
-      final String waveletId, final SilentOperationSink<WaveletOperation> target) {
+      final String waveId, String waveletId, final SilentOperationSink<WaveletOperation> target) {
     return new FlushingOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        target.consume(new OperationCrypto().decrypt(op));
+        OperationCrypto.create(crypto.getCipher(waveId)).decrypt(op, (WaveletOperation wop) -> {
+          target.consume(wop);
+          return null;
+        });
       }
 
       @Override
@@ -98,15 +105,18 @@ public final class StaticChannelBinder {
    * only reason a channel is not already a sink is because it has a more
    * general acceptor that takes a varargs parameter.
    */
-  private static SilentOperationSink<WaveletOperation> asOpSink(final OperationChannel target) {
+  private static SilentOperationSink<WaveletOperation> asOpSink(final OperationChannel target, final String waveId, final String waveletId) {
     return new SilentOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        try {
-          target.send(new OperationCrypto().encrypt(op, System.currentTimeMillis()));
-        } catch (ChannelException e) {
-          throw new RuntimeException("Send failed, channel is broken", e);
-        }
+        OperationCrypto.create(crypto.getCipher(waveId)).encrypt(op, System.currentTimeMillis(), (WaveletOperation wop) -> {
+          try {
+            target.send(wop);
+          } catch (ChannelException e) {
+            throw new RuntimeException("Send failed, channel is broken", e);
+          }
+          return null;
+        });
       }
     };
   }
