@@ -9,7 +9,7 @@ import org.waveprotocol.wave.model.document.operation.DocOp;
 
 public class OperationCryptoTest {
   
-  Cipher cipher = new Cipher() {
+  Cipher mockCipher = new Cipher() {
     @Override
     public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback) {
       callback.onSuccess(plaintext);
@@ -21,9 +21,9 @@ public class OperationCryptoTest {
   };
   
   private void encryptAndDecrypt(DocOp dop, String expectedCiphertext, String expectedPlaintext) {
-    OperationCrypto.create(cipher).encrypt(dop, 0, (DocOp encrypted) -> {
+    OperationCrypto.create(mockCipher).encrypt(dop, 0, (DocOp encrypted) -> {
       assertEquals(expectedCiphertext, DocOpUtil.toConciseString(encrypted));
-      OperationCrypto.create(cipher).decrypt(encrypted, (DocOp decrypted) -> {
+      OperationCrypto.create(mockCipher).decrypt(encrypted, (DocOp decrypted) -> {
         assertEquals(expectedPlaintext, DocOpUtil.toConciseString(decrypted));
         return null;
       });

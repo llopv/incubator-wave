@@ -35,16 +35,10 @@ public class WaveCryptoManager {
   }
 
   @JsType
-  public abstract class Cipher {
-    public abstract void encrypt(String plaintext, String additionalData, Callback<String, Object> callback);
+  public interface Cipher {
+    public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback);
 
-    public abstract void decrypt(String ciphertext, Callback<String, Object> callback);
-
-    final Object cryptoKey;
-
-    public Cipher(Object cryptoKey) {
-      this.cryptoKey = cryptoKey;
-    }
+    public void decrypt(String ciphertext, Callback<String, Object> callback);
 
   }
 
@@ -121,7 +115,9 @@ public class WaveCryptoManager {
   }
 
   public Cipher getCipher(final String waveId) {
-    return new Cipher(keysRegistry.get(waveId)) {
+    return new Cipher() {
+      
+      final Object cryptoKey = keysRegistry.get(waveId);
 
       @Override
       public void encrypt(String plaintext, String additionalDataStr, Callback<String, Object> callback) {
