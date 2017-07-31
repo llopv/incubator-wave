@@ -29,7 +29,7 @@ import org.apache.wave.box.server.rpc.InitialsAvatarsServlet;
 import org.waveprotocol.box.common.comms.WaveClientRpc.ProtocolWaveClientRpc;
 import org.waveprotocol.box.server.authentication.AccountStoreHolder;
 import org.waveprotocol.box.server.authentication.SessionManager;
-import org.waveprotocol.box.server.crypto.ReplayServlet;
+import org.waveprotocol.box.server.crypto.SnapshotServlet;
 import org.waveprotocol.box.server.executor.ExecutorsModule;
 import org.waveprotocol.box.server.frontend.ClientFrontend;
 import org.waveprotocol.box.server.frontend.ClientFrontendImpl;
@@ -172,6 +172,8 @@ public class ServerMain {
     server.addServlet("/auth/signout", SignOutServlet.class);
     server.addServlet("/auth/register", UserRegistrationServlet.class);
 
+    server.addServlet("/crypto/snapshot/*", SnapshotServlet.class);
+
     server.addServlet("/locale/*", LocaleServlet.class);
     server.addServlet("/fetch/*", FetchServlet.class);
     server.addServlet("/search/*", SearchServlet.class);
@@ -185,7 +187,6 @@ public class ServerMain {
     server.addServlet("/webclient/remote_logging", RemoteLoggingServiceImpl.class);
     server.addServlet("/profile/*", FetchProfilesServlet.class);
     server.addServlet("/iniavatars/*", InitialsAvatarsServlet.class);
-    server.addServlet("/version/*", ReplayServlet.class);
     server.addServlet("/waveref/*", WaveRefServlet.class);
 
     String gadgetServerHostname = config.getString("core.gadget_server_hostname");
