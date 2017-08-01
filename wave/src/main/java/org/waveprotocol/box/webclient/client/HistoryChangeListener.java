@@ -54,14 +54,14 @@ public class HistoryChangeListener {
         if (encodedToken == null || encodedToken.length() == 0) {
           return;
         }
-        
+
         String[] tokens = encodedToken.split("/");
         String key = null;
         if (tokens.length > 2) {
-        	encodedToken = encodedToken.substring(0, encodedToken.lastIndexOf("/"));
-        	key = tokens[2];
+          encodedToken = encodedToken.substring(0, encodedToken.lastIndexOf("/"));
+          key = tokens[2];
         }
-        
+
         WaveRef waveRef;
         try {
           waveRef = GwtWaverefEncoder.decodeWaveRefFromPath(encodedToken);

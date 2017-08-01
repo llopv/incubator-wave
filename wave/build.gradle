@@ -365,7 +365,7 @@ task compileGwtDev {
 }
 
 
-// run.dependsOn compileGwt
+run.dependsOn compileGwt
 compileJava.dependsOn = [generateMessages, generateGXP]
 
 /* Gwt Dev Tasks */

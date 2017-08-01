@@ -116,7 +116,7 @@ public class WaveCryptoManager {
 
   public Cipher getCipher(final String waveId) {
     return new Cipher() {
-      
+
       final Object cryptoKey = keysRegistry.get(waveId);
 
       @Override

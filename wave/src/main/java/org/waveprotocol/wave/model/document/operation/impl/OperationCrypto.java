@@ -36,15 +36,15 @@ public class OperationCrypto {
       this.cipher = cipher;
       this.rev = rev;
     }
-    
+
     public DocOp getDocOp() {
       return builder.build();
     }
-    
+
     public String getCollectedText() {
       return result;
     }
-    
+
     public int getCount() {
       return count;
     }
@@ -103,13 +103,13 @@ public class OperationCrypto {
       builder.updateAttributes(attrUpdate);
     }
   }
-  
+
   private Cipher cipher;
 
   public static OperationCrypto create(Cipher cipher) {
     return new OperationCrypto(cipher);
   }
-  
+
   private OperationCrypto(Cipher cipher) {
     this.cipher = cipher;
   }
@@ -137,9 +137,10 @@ public class OperationCrypto {
   private class CipherWrapper {
     private WaveletOperationContext context;
     private String blipId;
+
     public CipherWrapper() {
     }
-    
+
     public DocOp wop2Dop(WaveletOperation op) {
       if (op instanceof WaveletBlipOperation) {
         WaveletBlipOperation wop = (WaveletBlipOperation) op;
@@ -152,7 +153,7 @@ public class OperationCrypto {
       }
       return null;
     }
-    
+
     public WaveletOperation dop2Wop(DocOp dop) {
       BlipOperation bop = new BlipContentOperation(context, dop);
       return new WaveletBlipOperation(blipId, bop);
@@ -166,7 +167,7 @@ public class OperationCrypto {
     }
     return new String(chars);
   }
-  
+
   private DocOp annotate(long rev, int count, String text) {
     String annotTag = "cipher/" + String.valueOf(rev);
     AnnotationBoundaryMap boundary = new AnnotationBoundaryMapBuilder().change(annotTag, null, text).build();
@@ -201,9 +202,10 @@ public class OperationCrypto {
           collector.add(annotate(rev, count, result));
           callback.apply(collector.composeAll());
         }
+
         @Override
         public void onFailure(Object reason) {
-          
+
         }
       });
     } else {
@@ -212,12 +214,12 @@ public class OperationCrypto {
   }
 
   public void decrypt(DocOp dop, final Function<DocOp, Void> callback) {
-    
+
     if (dop.getType(0) != DocOpComponentType.ANNOTATION_BOUNDARY) {
       callback.apply(dop);
       return;
     }
-    
+
     AnnotationBoundaryMap map = dop.getAnnotationBoundary(0);
     int i = 0;
 
@@ -228,7 +230,7 @@ public class OperationCrypto {
       callback.apply(dop);
       return;
     }
-    
+
     String ciphertext = map.getNewValue(i);
 
     cipher.decrypt(ciphertext, new Callback<String, Object>() {
@@ -236,9 +238,9 @@ public class OperationCrypto {
       public void onSuccess(String decrypted) {
 
         CryptoCursor cursor = new CryptoCursor(cipher) {
-          
+
           String text = decrypted;
-          
+
           @Override
           public void characters(String chars) {
             String chunk = text.substring(0, chars.length());
@@ -250,9 +252,10 @@ public class OperationCrypto {
         dop.apply(cursor);
         callback.apply(cursor.getDocOp());
       }
+
       @Override
       public void onFailure(Object reason) {
-        
+
       }
     });
   }

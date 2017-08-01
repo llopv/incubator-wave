@@ -353,36 +353,30 @@ public class WebClient implements EntryPoint {
     channel = new RemoteViewServiceMultiplexer(websocket, loggedInUser.getAddress());
   }
 
-  
   private void openWave(String key, WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
-	  
-	  WaveCryptoManager.Callback<String, Object> openCallback = new WaveCryptoManager.Callback<String, Object>() {
 
-		@Override
-		public void onSuccess(String key) {
-			openWaveWithKey(key, waveRef, isNewWave, participants);			
-		}
+    WaveCryptoManager.Callback<String, Object> openCallback = new WaveCryptoManager.Callback<String, Object>() {
 
-		@Override
-		public void onFailure(Object reason) {
-			Window.alert("Key is not valid!\n\n "+ (reason != null ? reason.toString() : ""));
-		}
-		  		  
-	  };
-	  
-	  if (!isNewWave) {
-			
-			if (key == null || key.isEmpty())
-				key = Window.prompt("Enter key", "");
-			
-			WaveCryptoManager.get().registerKey(waveRef.getWaveId(), key, openCallback);
-			
-			
-	} else {
+      @Override
+      public void onSuccess(String key) {
+        openWaveWithKey(key, waveRef, isNewWave, participants);
+      }
 
-		WaveCryptoManager.get().generateKey(waveRef.getWaveId(), openCallback);
-	}
-	
+      @Override
+      public void onFailure(Object reason) {
+        Window.alert("Key is not valid!\n\n " + (reason != null ? reason.toString() : ""));
+      }
+
+    };
+
+    if (!isNewWave) {
+      if (key == null || key.isEmpty()) {
+        key = Window.prompt("Enter key", "");
+      }
+      WaveCryptoManager.get().registerKey(waveRef.getWaveId(), key, openCallback);
+    } else {
+      WaveCryptoManager.get().generateKey(waveRef.getWaveId(), openCallback);
+    }
   }
   
   /**
@@ -402,7 +396,7 @@ public class WebClient implements EntryPoint {
       wave.destroy();
       wave = null;
     }
-    
+
     // Release the display:none.
     UIObject.setVisible(waveFrame.getElement(), true);
     waveHolder.getElement().appendChild(loading);
@@ -436,12 +430,6 @@ public class WebClient implements EntryPoint {
     }
     History.newItem(GwtWaverefEncoder.encodeToUriPathSegment(waveRef)+"/"+key, false);
   }
-  
-  
-  
-  
-  
-  
 
   /**
    * An exception handler that reports exceptions using a <em>shiny banner</em>
