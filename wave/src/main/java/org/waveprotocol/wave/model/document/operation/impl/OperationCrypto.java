@@ -154,14 +154,14 @@ public class OperationCrypto {
     }
   }
 
-  public static void encrypt(String waveId, WaveletOperation op, long rev,
+  public static void encrypt(String waveId, WaveletOperation op, String id,
       final Function<WaveletOperation, Void> callback) {
     CipherWrapper wrapper = new CipherWrapper();
     DocOp dop = wrapper.unwrap(op);
     if (dop == null) {
       callback.apply(op);
     } else {
-      encrypt(waveId, dop, rev, (DocOp encryptedDop) -> callback.apply(wrapper.wrap(encryptedDop)));
+      encrypt(waveId, dop, id, (DocOp encryptedDop) -> callback.apply(wrapper.wrap(encryptedDop)));
     }
   }
 
@@ -201,10 +201,10 @@ public class OperationCrypto {
     }
   }
 
-  private static DocOp annotate(DocOp dop, long rev, String text) {
+  private static DocOp annotate(DocOp dop, String id, String text) {
     Counter counter = new Counter();
     dop.apply(counter);
-    String annotTag = CIPHER_TAG + String.valueOf(rev);
+    String annotTag = CIPHER_TAG + id;
     AnnotationBoundaryMap boundary = new AnnotationBoundaryMapBuilder().change(annotTag, null, text).build();
     AnnotationBoundaryMap end = new AnnotationBoundaryMapBuilder().end(annotTag).build();
     DocOp ann = new DocOpBuilder().annotationBoundary(boundary).retain(counter.count).annotationBoundary(end).build();
@@ -244,7 +244,7 @@ public class OperationCrypto {
     return cursor.getNewDop(dop);
   }
 
-  public static void encrypt(String waveId, DocOp dop, long rev, final Function<DocOp, Void> callback) {
+  public static void encrypt(String waveId, DocOp dop, String id, final Function<DocOp, Void> callback) {
     Obfuscator cursor = new Obfuscator();
     DocOp obfuscatedDop = cursor.getNewDop(dop);
     String text = cursor.getCollectedText();
@@ -252,7 +252,7 @@ public class OperationCrypto {
       crypto.getCipher(waveId).encrypt(text, "", new Callback<String, Object>() {
         @Override
         public void onSuccess(String ciphertext) {
-          callback.apply(annotate(obfuscatedDop, rev, ciphertext));
+          callback.apply(annotate(obfuscatedDop, id, ciphertext));
         }
 
         @Override

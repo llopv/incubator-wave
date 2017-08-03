@@ -31,6 +31,8 @@ import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
 import org.waveprotocol.wave.model.util.Pair;
 
+import com.google.gwt.user.client.Random;
+
 /**
  * Binds a wave's wavelets with supplied operation channels.
  *
@@ -107,7 +109,8 @@ public final class StaticChannelBinder {
     return new SilentOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        OperationCrypto.encrypt(waveId, op, System.currentTimeMillis(), (WaveletOperation wop) -> {
+        String id = String.valueOf(System.currentTimeMillis()) + String.valueOf(Random.nextInt());
+        OperationCrypto.encrypt(waveId, op, id, (WaveletOperation wop) -> {
           try {
             target.send(wop);
           } catch (ChannelException e) {

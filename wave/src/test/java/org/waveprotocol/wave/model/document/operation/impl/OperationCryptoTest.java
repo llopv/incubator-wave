@@ -26,7 +26,7 @@ public class OperationCryptoTest {
 
   private void encryptAndDecrypt(DocOp dop, String expectedCiphertext, String expectedPlaintext) {
     OperationCrypto.crypto = new WaveCryptoManagerMock();
-    OperationCrypto.encrypt("XXX", dop, 0, (DocOp encrypted) -> {
+    OperationCrypto.encrypt("XXX", dop, "0", (DocOp encrypted) -> {
       assertEquals(expectedCiphertext, DocOpUtil.toConciseString(encrypted));
       OperationCrypto.decrypt("XXX", encrypted, (DocOp decrypted) -> {
         assertEquals(expectedPlaintext, DocOpUtil.toConciseString(decrypted));
