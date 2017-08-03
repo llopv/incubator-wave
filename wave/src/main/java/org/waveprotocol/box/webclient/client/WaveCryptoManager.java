@@ -18,10 +18,7 @@ import com.google.gwt.typedarrays.shared.Uint8Array;
 
 import jsinterop.annotations.JsType;
 
-@JsType(namespace = "WaveCrypto")
 public class WaveCryptoManager {
-  public static final WaveId DEFAULT_WAVE_ID = WaveId.of("local.net", "XXXXXX");
-  public static final String DEFAULT_WAVE_ID_STR = ModernIdSerialiser.INSTANCE.serialiseWaveId(DEFAULT_WAVE_ID);
 
   private static final String CRYPTO_KEY_FORMAT = "jwk";
   private static final String CRYPTO_JSON_ALGORITHM = "A256GCM";
@@ -34,7 +31,6 @@ public class WaveCryptoManager {
     return instance;
   }
 
-  @JsType
   public interface Cipher {
     public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback);
 
@@ -49,7 +45,7 @@ public class WaveCryptoManager {
     public void onFailure(R reason);
   }
 
-  public static String arrayBufferToBase64(ArrayBuffer buffer) {
+  private static String arrayBufferToBase64(ArrayBuffer buffer) {
     Uint8Array bytes = Uint8ArrayNative.create(buffer);
     String binaryStr = "";
 
@@ -59,7 +55,7 @@ public class WaveCryptoManager {
     return NativeWindow.btoa(binaryStr);
   }
 
-  public static ArrayBuffer base64ToArrayBuffer(String s) {
+  private static ArrayBuffer base64ToArrayBuffer(String s) {
 
     String binaryStr = NativeWindow.atob(s);
     Uint8Array bytes = Uint8ArrayNative.create(binaryStr.length());
@@ -71,11 +67,11 @@ public class WaveCryptoManager {
     return bytes.buffer();
   }
 
-  public static ArrayBuffer stringToArrayBuffer(String text) {
+  private static ArrayBuffer stringToArrayBuffer(String text) {
     return new NativeWindow.TextEncoder().encode(text);
   }
 
-  public static String arrayBufferToString(ArrayBuffer buffer) {
+  private static String arrayBufferToString(ArrayBuffer buffer) {
     return new NativeWindow.TextDecoder().decode(buffer);
   }
 

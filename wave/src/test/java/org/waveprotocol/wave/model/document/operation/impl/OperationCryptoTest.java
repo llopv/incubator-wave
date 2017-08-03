@@ -3,28 +3,32 @@ package org.waveprotocol.wave.model.document.operation.impl;
 import static org.junit.Assert.*;
 
 import org.junit.Test;
-import org.waveprotocol.box.webclient.client.WaveCryptoManager.Callback;
-import org.waveprotocol.box.webclient.client.WaveCryptoManager.Cipher;
+import org.waveprotocol.box.webclient.client.WaveCryptoManager;
 import org.waveprotocol.wave.model.document.operation.DocOp;
 
 public class OperationCryptoTest {
 
-  Cipher mockCipher = new Cipher() {
-    @Override
-    public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback) {
-      callback.onSuccess(plaintext);
-    }
+  private class WaveCryptoManagerMock extends WaveCryptoManager {
+    public Cipher getCipher(String waveId) {
+      return new Cipher() {
+        @Override
+        public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback) {
+          callback.onSuccess(plaintext);
+        }
 
-    @Override
-    public void decrypt(String ciphertext, Callback<String, Object> callback) {
-      callback.onSuccess(ciphertext);
+        @Override
+        public void decrypt(String ciphertext, Callback<String, Object> callback) {
+          callback.onSuccess(ciphertext);
+        }
+      };
     }
-  };
+  }
 
   private void encryptAndDecrypt(DocOp dop, String expectedCiphertext, String expectedPlaintext) {
-    OperationCrypto.create(mockCipher).encrypt(dop, 0, (DocOp encrypted) -> {
+    OperationCrypto.crypto = new WaveCryptoManagerMock();
+    OperationCrypto.encrypt("XXX", dop, 0, (DocOp encrypted) -> {
       assertEquals(expectedCiphertext, DocOpUtil.toConciseString(encrypted));
-      OperationCrypto.create(mockCipher).decrypt(encrypted, (DocOp decrypted) -> {
+      OperationCrypto.decrypt("XXX", encrypted, (DocOp decrypted) -> {
         assertEquals(expectedPlaintext, DocOpUtil.toConciseString(decrypted));
         return null;
       });
@@ -36,7 +40,7 @@ public class OperationCryptoTest {
   public void testInsert() {
     DocOp dop = new DocOpBuilder().characters("hello").build();
     encryptAndDecrypt(dop, "|| { \"cipher/0\": null -> \"hello\" }; ++\"*****\"; || { \"cipher/0\" }; ",
-        "|| { \"cipher/0\": null -> \"hello\" }; ++\"hello\"; || { \"cipher/0\" }; ");
+        "++\"hello\"; ");
   }
 
   @Test
@@ -51,6 +55,6 @@ public class OperationCryptoTest {
     DocOp dop = builder.characters("hello").retain(1).deleteCharacters("world").build();
     encryptAndDecrypt(dop,
         "|| { \"cipher/0\": null -> \"hello\" }; ++\"*****\"; __1; --\"*****\"; || { \"cipher/0\" }; ",
-        "|| { \"cipher/0\": null -> \"hello\" }; ++\"hello\"; __1; --\"*****\"; || { \"cipher/0\" }; ");
+        "++\"hello\"; __1; --\"*****\"; ");
   }
 }

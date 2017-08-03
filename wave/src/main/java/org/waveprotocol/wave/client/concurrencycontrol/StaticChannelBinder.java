@@ -19,7 +19,6 @@
 
 package org.waveprotocol.wave.client.concurrencycontrol;
 
-import org.waveprotocol.box.webclient.client.WaveCryptoManager;
 import org.waveprotocol.wave.client.wave.WaveDocuments;
 import org.waveprotocol.wave.concurrencycontrol.channel.OperationChannel;
 import org.waveprotocol.wave.concurrencycontrol.common.ChannelException;
@@ -41,7 +40,6 @@ public final class StaticChannelBinder {
 
   private final WaveletOperationalizer operationalizer;
   private final WaveDocuments<? extends CcDocument> docRegistry;
-  private static WaveCryptoManager crypto = new WaveCryptoManager();
 
   /**
    * Creates a binder for a wave.
@@ -80,7 +78,7 @@ public final class StaticChannelBinder {
     return new FlushingOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        OperationCrypto.create(crypto.getCipher(waveId)).decrypt(op, (WaveletOperation wop) -> {
+        OperationCrypto.decrypt(waveId, op, (WaveletOperation wop) -> {
           target.consume(wop);
           return null;
         });
@@ -109,7 +107,7 @@ public final class StaticChannelBinder {
     return new SilentOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        OperationCrypto.create(crypto.getCipher(waveId)).encrypt(op, System.currentTimeMillis(), (WaveletOperation wop) -> {
+        OperationCrypto.encrypt(waveId, op, System.currentTimeMillis(), (WaveletOperation wop) -> {
           try {
             target.send(wop);
           } catch (ChannelException e) {

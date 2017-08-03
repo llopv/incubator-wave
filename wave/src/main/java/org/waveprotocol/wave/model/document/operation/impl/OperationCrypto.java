@@ -2,8 +2,8 @@ package org.waveprotocol.wave.model.document.operation.impl;
 
 import java.util.function.Function;
 
+import org.waveprotocol.box.webclient.client.WaveCryptoManager;
 import org.waveprotocol.box.webclient.client.WaveCryptoManager.Callback;
-import org.waveprotocol.box.webclient.client.WaveCryptoManager.Cipher;
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMap;
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMapBuilder;
 import org.waveprotocol.wave.model.document.operation.Attributes;
@@ -20,33 +20,17 @@ import org.waveprotocol.wave.model.operation.wave.WaveletOperationContext;
 
 public class OperationCrypto {
 
-  private class CryptoCursor implements DocOpCursor {
+  private static final String CIPHER_TAG = "cipher/";
+
+  public static WaveCryptoManager crypto = new WaveCryptoManager();
+
+  private static abstract class DocOpBuilderCursor implements DocOpCursor {
 
     protected DocOpBuilder builder = new DocOpBuilder();
-    protected String result = "";
-    protected long rev;
-    protected int count = 0;
-    protected Cipher cipher;
 
-    public CryptoCursor(Cipher cipher) {
-      this.cipher = cipher;
-    }
-
-    public CryptoCursor(long rev, Cipher cipher) {
-      this.cipher = cipher;
-      this.rev = rev;
-    }
-
-    public DocOp getDocOp() {
+    public DocOp getNewDop(DocOp dop) {
+      dop.apply(this);
       return builder.build();
-    }
-
-    public String getCollectedText() {
-      return result;
-    }
-
-    public int getCount() {
-      return count;
     }
 
     @Override
@@ -57,25 +41,21 @@ public class OperationCrypto {
     @Override
     public void characters(String chars) {
       builder.characters(chars);
-      count += chars.length();
     }
 
     @Override
     public void elementStart(String type, Attributes attrs) {
       builder.elementStart(type, attrs);
-      count += 1;
     }
 
     @Override
     public void elementEnd() {
       builder.elementEnd();
-      count += 1;
     }
 
     @Override
     public void retain(int itemCount) {
       builder.retain(itemCount);
-      count += itemCount;
     }
 
     @Override
@@ -104,44 +84,105 @@ public class OperationCrypto {
     }
   }
 
-  private Cipher cipher;
+  private static class Obfuscator extends DocOpBuilderCursor {
 
-  public static OperationCrypto create(Cipher cipher) {
-    return new OperationCrypto(cipher);
-  }
+    protected String collectedText = "";
 
-  private OperationCrypto(Cipher cipher) {
-    this.cipher = cipher;
-  }
+    public String getCollectedText() {
+      return collectedText;
+    }
 
-  public void encrypt(WaveletOperation op, long rev, final Function<WaveletOperation, Void> callback) {
-    CipherWrapper wrapper = new CipherWrapper();
-    DocOp dop = wrapper.wop2Dop(op);
-    if (dop == null) {
-      callback.apply(op);
-    } else {
-      encrypt(dop, rev, (DocOp encryptedDop) -> callback.apply(wrapper.dop2Wop(encryptedDop)));
+    private String obfuscate(String text) {
+      char[] chars = text.toCharArray();
+      for (int i = 0; i < text.length(); i++) {
+        chars[i] = '*';
+      }
+      return new String(chars);
+    }
+
+    @Override
+    public void characters(String chars) {
+      collectedText += chars;
+      builder.characters(obfuscate(chars));
+    }
+
+    @Override
+    public void deleteCharacters(String chars) {
+      builder.deleteCharacters(obfuscate(chars));
     }
   }
 
-  public void decrypt(WaveletOperation op, final Function<WaveletOperation, Void> callback) {
-    CipherWrapper wrapper = new CipherWrapper();
-    DocOp dop = wrapper.wop2Dop(op);
-    if (dop == null) {
-      callback.apply(op);
-    } else {
-      decrypt(dop, (DocOp decryptedDop) -> callback.apply(wrapper.dop2Wop(decryptedDop)));
+  private static class Deobfuscator extends DocOpBuilderCursor {
+
+    private String text;
+    private int offset = 0;
+
+    public Deobfuscator(String text) {
+      this.text = text;
+    }
+
+    @Override
+    public void characters(String chars) {
+      String chunk = text.substring(offset, offset + chars.length());
+      offset += chars.length();
+      builder.characters(chunk);
     }
   }
 
-  private class CipherWrapper {
+  private static class Counter extends DocOpBuilderCursor {
+
+    int count = 0;
+
+    @Override
+    public void characters(String chars) {
+      count += chars.length();
+    }
+
+    @Override
+    public void elementEnd() {
+      count += 1;
+    }
+
+    @Override
+    public void elementStart(String type, Attributes attrs) {
+      count += 1;
+    }
+
+    @Override
+    public void retain(int itemCount) {
+      count += itemCount;
+    }
+  }
+
+  public static void encrypt(String waveId, WaveletOperation op, long rev,
+      final Function<WaveletOperation, Void> callback) {
+    CipherWrapper wrapper = new CipherWrapper();
+    DocOp dop = wrapper.unwrap(op);
+    if (dop == null) {
+      callback.apply(op);
+    } else {
+      encrypt(waveId, dop, rev, (DocOp encryptedDop) -> callback.apply(wrapper.wrap(encryptedDop)));
+    }
+  }
+
+  public static void decrypt(String waveId, WaveletOperation op, final Function<WaveletOperation, Void> callback) {
+    CipherWrapper wrapper = new CipherWrapper();
+    DocOp dop = wrapper.unwrap(op);
+    if (dop == null) {
+      callback.apply(op);
+    } else {
+      decrypt(waveId, dop, (DocOp decryptedDop) -> callback.apply(wrapper.wrap(decryptedDop)));
+    }
+  }
+
+  private static class CipherWrapper {
     private WaveletOperationContext context;
     private String blipId;
 
     public CipherWrapper() {
     }
 
-    public DocOp wop2Dop(WaveletOperation op) {
+    public DocOp unwrap(WaveletOperation op) {
       if (op instanceof WaveletBlipOperation) {
         WaveletBlipOperation wop = (WaveletBlipOperation) op;
         if (wop.getBlipOp() instanceof BlipContentOperation) {
@@ -154,109 +195,117 @@ public class OperationCrypto {
       return null;
     }
 
-    public WaveletOperation dop2Wop(DocOp dop) {
+    public WaveletOperation wrap(DocOp dop) {
       BlipOperation bop = new BlipContentOperation(context, dop);
       return new WaveletBlipOperation(blipId, bop);
     }
   }
 
-  private static String ofuscate(String text) {
-    char[] chars = text.toCharArray();
-    for (int i = 0; i < text.length(); i++) {
-      chars[i] = '*';
-    }
-    return new String(chars);
-  }
-
-  private DocOp annotate(long rev, int count, String text) {
-    String annotTag = "cipher/" + String.valueOf(rev);
+  private static DocOp annotate(DocOp dop, long rev, String text) {
+    Counter counter = new Counter();
+    dop.apply(counter);
+    String annotTag = CIPHER_TAG + String.valueOf(rev);
     AnnotationBoundaryMap boundary = new AnnotationBoundaryMapBuilder().change(annotTag, null, text).build();
     AnnotationBoundaryMap end = new AnnotationBoundaryMapBuilder().end(annotTag).build();
-    return new DocOpBuilder().annotationBoundary(boundary).retain(count).annotationBoundary(end).build();
+    DocOp ann = new DocOpBuilder().annotationBoundary(boundary).retain(counter.count).annotationBoundary(end).build();
+    DocOpCollector collector = new DocOpCollector();
+    collector.add(dop);
+    collector.add(ann);
+    return collector.composeAll();
   }
 
-  public void encrypt(DocOp dop, long rev, final Function<DocOp, Void> callback) {
-    CryptoCursor cursor = new CryptoCursor(rev, cipher) {
-      @Override
-      public void characters(String chars) {
-        result += chars;
-        builder.characters(ofuscate(chars));
-        count += chars.length();
-      }
+  private static DocOp unannotate(DocOp dop) {
 
+    if (cipherIndex(dop) < 0) {
+      return dop;
+    }
+
+    DocOpBuilderCursor cursor = new DocOpBuilderCursor() {
       @Override
-      public void deleteCharacters(String chars) {
-        builder.deleteCharacters(ofuscate(chars));
+      public void annotationBoundary(AnnotationBoundaryMap map) {
+        AnnotationBoundaryMapBuilder mapBuilder = new AnnotationBoundaryMapBuilder();
+        for (int i = 0; i < map.endSize(); i++) {
+          if (!map.getEndKey(i).startsWith(CIPHER_TAG)) {
+            mapBuilder.end(map.getEndKey(i));
+          }
+        }
+        for (int i = 0; i < map.changeSize(); i++) {
+          if (!map.getChangeKey(i).startsWith(CIPHER_TAG)) {
+            mapBuilder.change(map.getChangeKey(i), map.getOldValue(i), map.getNewValue(i));
+          }
+        }
+        map = mapBuilder.build();
+        if (map.changeSize() > 0 || map.endSize() > 0) {
+          builder.annotationBoundary(mapBuilder.build());
+        }
       }
     };
-    dop.apply(cursor);
-    dop = cursor.getDocOp();
+
+    return cursor.getNewDop(dop);
+  }
+
+  public static void encrypt(String waveId, DocOp dop, long rev, final Function<DocOp, Void> callback) {
+    Obfuscator cursor = new Obfuscator();
+    DocOp obfuscatedDop = cursor.getNewDop(dop);
     String text = cursor.getCollectedText();
-    int count = cursor.getCount();
     if (!text.isEmpty()) {
-      DocOpCollector collector = new DocOpCollector();
-      collector.add(dop);
-      cipher.encrypt(text, "", new Callback<String, Object>() {
+      crypto.getCipher(waveId).encrypt(text, "", new Callback<String, Object>() {
         @Override
-        public void onSuccess(String result) {
-          collector.add(annotate(rev, count, result));
-          callback.apply(collector.composeAll());
+        public void onSuccess(String ciphertext) {
+          callback.apply(annotate(obfuscatedDop, rev, ciphertext));
         }
 
         @Override
         public void onFailure(Object reason) {
-
+          throw new IllegalStateException(reason.toString());
         }
       });
     } else {
-      callback.apply(dop);
+      callback.apply(obfuscatedDop);
     }
   }
 
-  public void decrypt(DocOp dop, final Function<DocOp, Void> callback) {
+  public static void decrypt(String waveId, DocOp dop, final Function<DocOp, Void> callback) {
 
-    if (dop.getType(0) != DocOpComponentType.ANNOTATION_BOUNDARY) {
+    int index = cipherIndex(dop);
+    if (index < 0) {
       callback.apply(dop);
       return;
+    }
+
+    String ciphertext = dop.getAnnotationBoundary(0).getNewValue(index);
+
+    crypto.getCipher(waveId).decrypt(ciphertext, new Callback<String, Object>() {
+      @Override
+      public void onSuccess(String plaintext) {
+        Deobfuscator cursor = new Deobfuscator(plaintext);
+        DocOp processedDop = cursor.getNewDop(dop);
+        callback.apply(unannotate(processedDop));
+      }
+
+      @Override
+      public void onFailure(Object reason) {
+        throw new IllegalStateException(reason.toString());
+      }
+    });
+  }
+
+  private static int cipherIndex(DocOp dop) {
+    if (dop.getType(0) != DocOpComponentType.ANNOTATION_BOUNDARY) {
+      return -1;
     }
 
     AnnotationBoundaryMap map = dop.getAnnotationBoundary(0);
     int i = 0;
 
-    while (i < map.changeSize() && !map.getChangeKey(i).startsWith("cipher/")) {
+    while (i < map.changeSize() && !map.getChangeKey(i).startsWith(CIPHER_TAG)) {
       i++;
     }
+
     if (i >= map.changeSize()) {
-      callback.apply(dop);
-      return;
+      return -1;
     }
 
-    String ciphertext = map.getNewValue(i);
-
-    cipher.decrypt(ciphertext, new Callback<String, Object>() {
-      @Override
-      public void onSuccess(String decrypted) {
-
-        CryptoCursor cursor = new CryptoCursor(cipher) {
-
-          String text = decrypted;
-
-          @Override
-          public void characters(String chars) {
-            String chunk = text.substring(0, chars.length());
-            builder.characters(chunk);
-            text = text.substring(chars.length());
-            count += chars.length();
-          }
-        };
-        dop.apply(cursor);
-        callback.apply(cursor.getDocOp());
-      }
-
-      @Override
-      public void onFailure(Object reason) {
-
-      }
-    });
+    return i;
   }
 }
