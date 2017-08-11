@@ -38,4 +38,7 @@ public interface SearchPresenterMessages extends Messages {
 
   @DefaultMessage("Searching...")
   String searching();
+
+  @DefaultMessage("New Encrypted Wave")
+  String newEncryptedWave();
 }

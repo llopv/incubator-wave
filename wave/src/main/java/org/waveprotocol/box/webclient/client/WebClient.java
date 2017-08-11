@@ -79,6 +79,7 @@ import org.waveprotocol.wave.client.widget.popup.PopupChrome;
 import org.waveprotocol.wave.client.widget.popup.PopupChromeFactory;
 import org.waveprotocol.wave.client.widget.popup.PopupFactory;
 import org.waveprotocol.wave.client.widget.popup.UniversalPopup;
+import org.waveprotocol.wave.model.id.IdConstants;
 import org.waveprotocol.wave.model.id.IdGenerator;
 import org.waveprotocol.wave.model.id.WaveId;
 import org.waveprotocol.wave.model.wave.ParticipantId;
@@ -119,11 +120,9 @@ public class WebClient implements EntryPoint {
   /** Creates a popup that warns about network disconnects. */
   private static UniversalPopup createTurbulencePopup() {
     PopupChrome chrome = PopupChromeFactory.createPopupChrome();
-    UniversalPopup popup =
-        PopupFactory.createPopup(null, new CenterPopupPositioner(), chrome, true);
-    popup.add(new HTML("<div style='color: red; padding: 5px; text-align: center;'>"
-        + "<b>" + messages.turbulenceDetected() + "<br></br> "
-        + messages.saveAndReloadWave() + "</b></div>"));
+    UniversalPopup popup = PopupFactory.createPopup(null, new CenterPopupPositioner(), chrome, true);
+    popup.add(new HTML("<div style='color: red; padding: 5px; text-align: center;'>" + "<b>"
+        + messages.turbulenceDetected() + "<br></br> " + messages.saveAndReloadWave() + "</b></div>"));
     return popup;
   }
 
@@ -167,6 +166,8 @@ public class WebClient implements EntryPoint {
 
   private LocaleService localeService = new RemoteLocaleService();
 
+  private String keyInUri;
+
   /**
    * This is the entry point method.
    */
@@ -175,18 +176,18 @@ public class WebClient implements EntryPoint {
 
     ErrorHandler.install();
 
-    ClientEvents.get().addWaveCreationEventHandler(
-        new WaveCreationEventHandler() {
+    ClientEvents.get().addWaveCreationEventHandler(new WaveCreationEventHandler() {
 
-          @Override
-          public void onCreateRequest(WaveCreationEvent event, Set<ParticipantId> participantSet) {
-            LOG.info("WaveCreationEvent received");
-            if (channel == null) {
-              throw new RuntimeException("Spaghetti attack.  Create occured before login");
-            }
-            openWave(null, WaveRef.of(idGenerator.newWaveId()), true, participantSet);
-          }
-        });
+      @Override
+      public void onCreateRequest(WaveCreationEvent event, Set<ParticipantId> participantSet, boolean encrypted) {
+        LOG.info("WaveCreationEvent received");
+        if (channel == null) {
+          throw new RuntimeException("Spaghetti attack.  Create occured before login");
+        }
+        WaveRef ref = WaveRef.of(encrypted ? idGenerator.newEncryptedWaveId() : idGenerator.newWaveId());
+        openWave(ref, true, participantSet);
+      }
+    });
 
     setupLocaleSelect();
     setupConnectionIndicator();
@@ -235,18 +236,17 @@ public class WebClient implements EntryPoint {
 
   private void setupSearchPanel() {
     // On wave action fire an event.
-    SearchPresenter.WaveActionHandler actionHandler =
-        new SearchPresenter.WaveActionHandler() {
-          @Override
-          public void onCreateWave() {
-            ClientEvents.get().fireEvent(new WaveCreationEvent());
-          }
+    SearchPresenter.WaveActionHandler actionHandler = new SearchPresenter.WaveActionHandler() {
+      @Override
+      public void onCreateWave(boolean encrypted) {
+        ClientEvents.get().fireEvent(new WaveCreationEvent(encrypted));
+      }
 
-          @Override
-          public void onWaveSelected(WaveId id) {
-            ClientEvents.get().fireEvent(new WaveSelectionEvent(WaveRef.of(id)));
-          }
-        };
+      @Override
+      public void onWaveSelected(WaveId id) {
+        ClientEvents.get().fireEvent(new WaveSelectionEvent(WaveRef.of(id), null));
+      }
+    };
     Search search = SimpleSearch.create(RemoteSearchService.create(), waveStore);
     SearchPresenter.create(search, searchPanel, actionHandler, profiles);
   }
@@ -261,7 +261,8 @@ public class WebClient implements EntryPoint {
     ClientEvents.get().addWaveSelectionEventHandler(new WaveSelectionEventHandler() {
       @Override
       public void onSelection(WaveRef waveRef, String key) {
-        openWave(key, waveRef, false, null);
+        keyInUri = key;
+        openWave(waveRef, false, null);
       }
     });
   }
@@ -286,8 +287,7 @@ public class WebClient implements EntryPoint {
 
       @Override
       public boolean onChange(ChangeEvent event, Element context) {
-        UrlBuilder builder = Location.createUrlBuilder().setParameter(
-                "locale", select.getValue());
+        UrlBuilder builder = Location.createUrlBuilder().setParameter("locale", select.getValue());
         Window.Location.replace(builder.buildString());
         localeService.storeLocale(select.getValue());
         return true;
@@ -305,25 +305,25 @@ public class WebClient implements EntryPoint {
         Element element = Document.get().getElementById("netstatus");
         if (element != null) {
           switch (event.getStatus()) {
-            case CONNECTED:
-            case RECONNECTED:
-              element.setInnerText(messages.online());
-              element.setClassName("online");
-              isTurbulenceDetected = false;
-              turbulencePopup.hide();
-              break;
-            case DISCONNECTED:
-              element.setInnerText(messages.offline());
-              element.setClassName("offline");
-              if (!isTurbulenceDetected) {
-                isTurbulenceDetected = true;
-                turbulencePopup.show();
-              }
-              break;
-            case RECONNECTING:
-              element.setInnerText(messages.connecting());
-              element.setClassName("connecting");
-              break;
+          case CONNECTED:
+          case RECONNECTED:
+            element.setInnerText(messages.online());
+            element.setClassName("online");
+            isTurbulenceDetected = false;
+            turbulencePopup.hide();
+            break;
+          case DISCONNECTED:
+            element.setInnerText(messages.offline());
+            element.setClassName("offline");
+            if (!isTurbulenceDetected) {
+              isTurbulenceDetected = true;
+              turbulencePopup.show();
+            }
+            break;
+          case RECONNECTING:
+            element.setInnerText(messages.connecting());
+            element.setClassName("connecting");
+            break;
           }
         }
       }
@@ -353,42 +353,61 @@ public class WebClient implements EntryPoint {
     channel = new RemoteViewServiceMultiplexer(websocket, loggedInUser.getAddress());
   }
 
-  private void openWave(String key, WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
+  private void openWave(WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
 
-    WaveCryptoManager.Callback<String, Object> openCallback = new WaveCryptoManager.Callback<String, Object>() {
+    boolean encrypted = waveRef.getWaveId().getId().startsWith(IdConstants.ENCRYPTED_WAVE_PREFIX);
 
-      @Override
-      public void onSuccess(String key) {
-        openWaveWithKey(key, waveRef, isNewWave, participants);
-      }
-
-      @Override
-      public void onFailure(Object reason) {
-        Window.alert("Key is not valid!\n\n " + (reason != null ? reason.toString() : ""));
-      }
-
-    };
-
-    if (!isNewWave) {
-      if (key == null || key.isEmpty()) {
-        key = Window.prompt("Enter key", "");
-      }
-      WaveCryptoManager.get().registerKey(waveRef.getWaveId(), key, openCallback);
+    if (!encrypted) {
+      openWave(waveRef, isNewWave, participants, null);
     } else {
-      WaveCryptoManager.get().generateKey(waveRef.getWaveId(), openCallback);
+      String key;
+
+      WaveCryptoManager.Callback<String, Object> openCallback = new WaveCryptoManager.Callback<String, Object>() {
+
+        @Override
+        public void onSuccess(String key) {
+          openWave(waveRef, isNewWave, participants, key);
+        }
+
+        @Override
+        public void onFailure(Object reason) {
+          Window.alert("Key is not valid");
+        }
+
+      };
+
+      WaveCryptoManager cryptoManager = WaveCryptoManager.get();
+      WaveId waveId = waveRef.getWaveId();
+
+      if (isNewWave) {
+        cryptoManager.generateKey(waveId, openCallback);
+      } else if (cryptoManager.isRegisteredKey(waveId)) {
+        cryptoManager.getKey(waveId, openCallback);
+      } else if (keyInUri != null) {
+        cryptoManager.registerKey(waveId, keyInUri, openCallback);
+      } else {
+        key = Window.prompt("Enter key", "");
+        if (key != null) {
+          cryptoManager.registerKey(waveId, key, openCallback);
+        }
+      }
     }
   }
-  
+
   /**
    * Shows a wave in a wave panel.
    *
-   * @param crypto key
-   * @param waveRef wave id to open
-   * @param isNewWave whether the wave is being created by this client session.
-   * @param participants the participants to add to the newly created wave.
-   *        {@code null} if only the creator should be added
+   * @param waveRef
+   *          wave id to open
+   * @param isNewWave
+   *          whether the wave is being created by this client session.
+   * @param participants
+   *          the participants to add to the newly created wave. {@code null} if
+   *          only the creator should be added
+   * @param key
+   *          symmetric key
    */
-  private void openWaveWithKey(String key, WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
+  private void openWave(WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants, String key) {
     final org.waveprotocol.box.stat.Timer timer = Timing.startRequest("Open Wave");
     LOG.info("WebClient.openWave()");
 
@@ -402,9 +421,8 @@ public class WebClient implements EntryPoint {
     waveHolder.getElement().appendChild(loading);
     Element holder = waveHolder.getElement().appendChild(Document.get().createDivElement());
     Element unsavedIndicator = Document.get().getElementById("unsavedStateContainer");
-    StagesProvider wave =
-        new StagesProvider(holder, unsavedIndicator, waveHolder, waveFrame, waveRef, channel, idGenerator,
-            profiles, waveStore, isNewWave, Session.get().getDomain(), participants);
+    StagesProvider wave = new StagesProvider(holder, unsavedIndicator, waveHolder, waveFrame, waveRef, channel,
+        idGenerator, profiles, waveStore, isNewWave, Session.get().getDomain(), participants);
     this.wave = wave;
     wave.load(new Command() {
       @Override
@@ -428,7 +446,11 @@ public class WebClient implements EntryPoint {
         return;
       }
     }
-    History.newItem(GwtWaverefEncoder.encodeToUriPathSegment(waveRef)+"/"+key, false);
+    String historyItem = GwtWaverefEncoder.encodeToUriPathSegment(waveRef);
+    if (key != null) {
+      historyItem += "!" + key;
+    }
+    History.newItem(historyItem, false);
   }
 
   /**
@@ -458,8 +480,7 @@ public class WebClient implements EntryPoint {
     public void onUncaughtException(Throwable e) {
       if (!hasFired) {
         hasFired = true;
-        final ErrorIndicatorPresenter error =
-            ErrorIndicatorPresenter.create(RootPanel.get("banner"));
+        final ErrorIndicatorPresenter error = ErrorIndicatorPresenter.create(RootPanel.get("banner"));
         getStackTraceAsync(e, new Accessor<SafeHtml>() {
           @Override
           public void use(SafeHtml stack) {
@@ -494,8 +515,7 @@ public class WebClient implements EntryPoint {
             stack.appendHtmlConstant("Token:  " + token + "<br> ");
             stack.appendEscaped(String.valueOf(error.getMessage())).appendHtmlConstant("<br>");
             for (StackTraceElement elt : error.getStackTrace()) {
-              stack.appendHtmlConstant("  ")
-                  .appendEscaped(maybe(elt.getClassName(), "??")).appendHtmlConstant(".") //
+              stack.appendHtmlConstant("  ").appendEscaped(maybe(elt.getClassName(), "??")).appendHtmlConstant(".") //
                   .appendEscaped(maybe(elt.getMethodName(), "??")).appendHtmlConstant(" (") //
                   .appendEscaped(maybe(elt.getFileName(), "??")).appendHtmlConstant(":") //
                   .appendEscaped(maybe(elt.getLineNumber(), "??")).appendHtmlConstant(")") //

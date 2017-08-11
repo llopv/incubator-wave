@@ -248,6 +248,11 @@ public class CcBasedWaveViewTest extends TestCase {
     public String getDefaultDomain() {
       throw new UnsupportedOperationException("Unsupported for test");
     }
+
+    @Override
+    public WaveId newEncryptedWaveId() {
+      throw new UnsupportedOperationException("Unsupported for test");
+    }
   };
 
   private final PrintLogger logger = new PrintLogger();

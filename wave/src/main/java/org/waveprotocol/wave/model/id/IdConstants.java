@@ -36,6 +36,9 @@ public interface IdConstants {
   /** Prefix for conversational wave ids. */
   public static final String WAVE_PREFIX = "w";
 
+  /** Prefix for conversational encrypted wave ids. */
+  public static final String ENCRYPTED_WAVE_PREFIX = "ew";
+
   /** Prefix for profile wave ids. */
   public static final String PROFILE_WAVE_PREFIX = "prof";
 

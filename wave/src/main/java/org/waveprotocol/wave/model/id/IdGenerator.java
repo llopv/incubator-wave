@@ -44,6 +44,14 @@ public interface IdGenerator {
   WaveId newWaveId();
 
   /**
+   * Creates a new unique encrypted wave id.
+   *
+   * Conversational encrypted waves are specified by a leading
+   * token 'ew' followed by a pseudo-random string, e.g. ew+3dKS9cD.
+   */
+  WaveId newEncryptedWaveId();
+
+  /**
    * Creates a new unique wavelet id.
    *
    * Conversational wavelets (those expected to render in a wave client) are

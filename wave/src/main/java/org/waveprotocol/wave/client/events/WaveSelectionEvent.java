@@ -28,11 +28,6 @@ public class WaveSelectionEvent extends GwtEvent<WaveSelectionEventHandler> {
   private final WaveRef waveRef;
   private final String key;
 
-  public WaveSelectionEvent(WaveRef waveRef) {
-    this.waveRef = Preconditions.checkNotNull(waveRef,"null waveref");
-    this.key = null;
-  }
-
   public WaveSelectionEvent(WaveRef waveRef, String key) {
     this.waveRef = Preconditions.checkNotNull(waveRef, "null waveref");
     this.key = key;
@@ -47,9 +42,4 @@ public class WaveSelectionEvent extends GwtEvent<WaveSelectionEventHandler> {
   protected void dispatch(WaveSelectionEventHandler handler) {
     handler.onSelection(waveRef, key);
   }
-
-  public String getKey() {
-    return key;
-  }
-
 }

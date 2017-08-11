@@ -171,7 +171,7 @@ public final class ParticipantController {
           popup.hide();
         }
         ClientEvents.get().fireEvent(
-            new WaveCreationEvent(participants));
+            new WaveCreationEvent(false, participants));
       }
 
       @Override

@@ -27,18 +27,21 @@ public class WaveCreationEvent extends GwtEvent<WaveCreationEventHandler> {
   public static final Type<WaveCreationEventHandler> TYPE = new Type<WaveCreationEventHandler>();
 
   private final Set<ParticipantId> participants;
+  private final boolean encrypted;
 
-  public WaveCreationEvent() {
+  public WaveCreationEvent(boolean encrypted) {
     this.participants = null;
+    this.encrypted = encrypted;
   }
 
-  public WaveCreationEvent(Set<ParticipantId> participants) {
+  public WaveCreationEvent(boolean encrypted, Set<ParticipantId> participants) {
     this.participants = participants;
+    this.encrypted = encrypted;
   }
 
   @Override
   protected void dispatch(WaveCreationEventHandler handler) {
-    handler.onCreateRequest(this, participants);
+    handler.onCreateRequest(this, participants, this.encrypted);
   }
 
   @Override

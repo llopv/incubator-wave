@@ -194,6 +194,12 @@ public class WaverefEncoder {
    * @throws InvalidWaveRefException If the path contains less than 2 tokens or 3 tokens.
    */
   public WaveRef decodeWaveRefFromPath(String path) throws InvalidWaveRefException {
+
+    // Ignore symmetric key if present
+    if (path.lastIndexOf("!") >= 0) {
+      path = path.substring(0, path.lastIndexOf("!"));
+    }
+
     String[] tokens = path.split("/");
     if (tokens.length < 2 || tokens.length == 3) {
       throw new InvalidWaveRefException(path,

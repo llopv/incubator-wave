@@ -27,5 +27,5 @@ public abstract class WaveCreationEventHandler implements EventHandler {
   /**
    * Called when something wants to create a new wave.
    */
-  public abstract void onCreateRequest(WaveCreationEvent event, Set<ParticipantId> participants);
+  public abstract void onCreateRequest(WaveCreationEvent event, Set<ParticipantId> participants, boolean encrypted);
 }

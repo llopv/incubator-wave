@@ -55,11 +55,10 @@ public class HistoryChangeListener {
           return;
         }
 
-        String[] tokens = encodedToken.split("/");
+        String[] parts = encodedToken.split("!");
         String key = null;
-        if (tokens.length > 2) {
-          encodedToken = encodedToken.substring(0, encodedToken.lastIndexOf("/"));
-          key = tokens[2];
+        if (parts.length > 1) {
+          key = parts[1];
         }
 
         WaveRef waveRef;

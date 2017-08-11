@@ -21,6 +21,7 @@ import jsinterop.annotations.JsType;
 public class WaveCryptoManager {
 
   private static final String CRYPTO_KEY_FORMAT = "jwk";
+  private static final String CRYPTO_JSON_KTY = "oct";
   private static final String CRYPTO_JSON_ALGORITHM = "A256GCM";
   private static final String CRYPTO_ALGORITHM_NAME = "AES-GCM";
   private static final String[] CRYPTO_KEY_USAGES = new String[] { "encrypt", "decrypt" };
@@ -75,9 +76,14 @@ public class WaveCryptoManager {
     return new NativeWindow.TextDecoder().decode(buffer);
   }
 
-  private final static Map<String, Object> keysRegistry = new HashMap<String, Object>();
+  protected final static Map<String, Object> keysRegistry = new HashMap<String, Object>();
 
   public void generateKey(WaveId waveId, final Callback<String, Object> callback) {
+
+    if (isRegisteredKey(waveId)) {
+      callback.onFailure("Already registered");
+    }
+
     AlgorithmIdentifier algorithm = new AlgorithmIdentifier(CRYPTO_ALGORITHM_NAME, 256);
 
     Crypto.subtle.generateKey(algorithm, true, CRYPTO_KEY_USAGES).then((Object cryptoKey) -> {
@@ -93,21 +99,33 @@ public class WaveCryptoManager {
 
   }
 
-  public void registerKey(WaveId waveId, String key, final Callback<String, Object> callback) {
-    JsonWebKeyImpl keyData = new JsonWebKeyImpl("oct", key, CRYPTO_JSON_ALGORITHM, true);
-    AlgorithmIdentifier algorithm = new AlgorithmIdentifier(CRYPTO_ALGORITHM_NAME, 256);
-
-    Crypto.subtle.importKey(CRYPTO_KEY_FORMAT, keyData, algorithm, false, CRYPTO_KEY_USAGES)
-        .then((Object cryptoKey) -> {
-          keysRegistry.put(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId), cryptoKey);
-          callback.onSuccess(key);
-        }, (Object reason) -> {
-          callback.onFailure(reason);
-        });
+  public boolean isRegisteredKey(WaveId waveId) {
+    return keysRegistry.containsKey(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId));
   }
 
-  public Object getCryptoKey(String waveId) {
-    return keysRegistry.get(waveId);
+  public void registerKey(WaveId waveId, String key, final Callback<String, Object> callback) {
+    JsonWebKeyImpl keyData = new JsonWebKeyImpl(CRYPTO_JSON_KTY, key, CRYPTO_JSON_ALGORITHM, true);
+    AlgorithmIdentifier algorithm = new AlgorithmIdentifier(CRYPTO_ALGORITHM_NAME, 256);
+
+    Crypto.subtle.importKey(CRYPTO_KEY_FORMAT, keyData, algorithm, true, CRYPTO_KEY_USAGES).then((Object cryptoKey) -> {
+      keysRegistry.put(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId), cryptoKey);
+      callback.onSuccess(key);
+    }, (Object reason) -> {
+      callback.onFailure(reason);
+    });
+  }
+
+  public void getKey(WaveId waveId, final Callback<String, Object> callback) {
+    Object cryptoKey = keysRegistry.get(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId));
+    if (cryptoKey == null) {
+      callback.onFailure(null);
+      return;
+    }
+    Crypto.subtle.exportKey(CRYPTO_KEY_FORMAT, cryptoKey).then((JsonWebKey key) -> {
+      callback.onSuccess(key.k);
+    }, (Object reason) -> {
+      callback.onFailure(reason);
+    });
   }
 
   public Cipher getCipher(final String waveId) {
@@ -150,5 +168,4 @@ public class WaveCryptoManager {
       }
     };
   }
-
 }

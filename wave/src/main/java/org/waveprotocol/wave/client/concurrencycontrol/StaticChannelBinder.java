@@ -26,6 +26,7 @@ import org.waveprotocol.wave.concurrencycontrol.wave.CcDocument;
 import org.waveprotocol.wave.concurrencycontrol.wave.FlushingOperationSink;
 import org.waveprotocol.wave.concurrencycontrol.wave.OperationSucker;
 import org.waveprotocol.wave.model.document.operation.impl.OperationCrypto;
+import org.waveprotocol.wave.model.id.IdConstants;
 import org.waveprotocol.wave.model.operation.SilentOperationSink;
 import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
@@ -80,10 +81,14 @@ public final class StaticChannelBinder {
     return new FlushingOperationSink<WaveletOperation>() {
       @Override
       public void consume(WaveletOperation op) {
-        OperationCrypto.decrypt(waveId, op, (WaveletOperation wop) -> {
-          target.consume(wop);
-          return null;
-        });
+        if (waveId.split("/")[1].startsWith(IdConstants.ENCRYPTED_WAVE_PREFIX)) {
+          OperationCrypto.decrypt(waveId, op, (WaveletOperation decryptedOp) -> {
+            target.consume(decryptedOp);
+            return null;
+          });
+        } else {
+          target.consume(op);
+        }
       }
 
       @Override
@@ -107,17 +112,26 @@ public final class StaticChannelBinder {
    */
   private static SilentOperationSink<WaveletOperation> asOpSink(final OperationChannel target, final String waveId, final String waveletId) {
     return new SilentOperationSink<WaveletOperation>() {
+
+      private void send(WaveletOperation op) {
+        try {
+          target.send(op);
+        } catch (ChannelException e) {
+          throw new RuntimeException("Send failed, channel is broken", e);
+        }
+      }
+
       @Override
       public void consume(WaveletOperation op) {
-        String id = String.valueOf(System.currentTimeMillis()) + String.valueOf(Random.nextInt());
-        OperationCrypto.encrypt(waveId, op, id, (WaveletOperation wop) -> {
-          try {
-            target.send(wop);
-          } catch (ChannelException e) {
-            throw new RuntimeException("Send failed, channel is broken", e);
-          }
-          return null;
-        });
+        if (waveId.split("/")[1].startsWith(IdConstants.ENCRYPTED_WAVE_PREFIX)) {
+          String id = String.valueOf(System.currentTimeMillis()) + String.valueOf(Random.nextInt());
+          OperationCrypto.encrypt(waveId, op, id, (WaveletOperation encryptedOp) -> {
+            send(encryptedOp);
+            return null;
+          });
+        } else {
+          send(op);
+        }
       }
     };
   }

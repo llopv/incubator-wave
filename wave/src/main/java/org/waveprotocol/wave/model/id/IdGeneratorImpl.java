@@ -81,6 +81,12 @@ public class IdGeneratorImpl implements IdGenerator, IdConstants {
     return WaveId.of(defaultDomain, newId(WAVE_PREFIX));
   }
 
+  //NOTE: These are _NOT_ federation happy. Ensure that your caller is!
+  @Override
+  public WaveId newEncryptedWaveId() {
+    return WaveId.of(defaultDomain, newId(ENCRYPTED_WAVE_PREFIX));
+  }
+
   @Override
   public WaveletId newConversationRootWaveletId() {
     return WaveletId.of(defaultDomain, CONVERSATION_ROOT_WAVELET);

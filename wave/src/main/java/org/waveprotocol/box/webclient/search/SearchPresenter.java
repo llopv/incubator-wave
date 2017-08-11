@@ -53,7 +53,7 @@ public final class SearchPresenter
    */
   public interface WaveActionHandler {
     /** Handles the wave creation action. */
-    void onCreateWave();
+    void onCreateWave(boolean encrypted);
 
     /** Handles a wave selection action. */
     void onWaveSelected(WaveId id);
@@ -170,7 +170,21 @@ public final class SearchPresenter
         group.addClickButton(), new ToolbarClickButton.Listener() {
           @Override
           public void onClicked() {
-            actionHandler.onCreateWave();
+            actionHandler.onCreateWave(false);
+
+            // HACK(hearnden): To mimic live search, fire a search poll
+            // reasonably soon (500ms) after creating a wave. This will be unnecessary
+            // with a real live search implementation. The delay is to give
+            // enough time for the wave state to propagate to the server.
+            int delay = 500;
+            scheduler.scheduleRepeating(searchUpdater, delay, POLLING_INTERVAL_MS);
+          }
+        });
+    new ToolbarButtonViewBuilder().setText(messages.newEncryptedWave()).applyTo(
+        group.addClickButton(), new ToolbarClickButton.Listener() {
+          @Override
+          public void onClicked() {
+            actionHandler.onCreateWave(true);
 
             // HACK(hearnden): To mimic live search, fire a search poll
             // reasonably soon (500ms) after creating a wave. This will be unnecessary
