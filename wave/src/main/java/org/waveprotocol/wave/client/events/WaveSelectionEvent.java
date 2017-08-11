@@ -32,7 +32,7 @@ public class WaveSelectionEvent extends GwtEvent<WaveSelectionEventHandler> {
     this.waveRef = Preconditions.checkNotNull(waveRef, "null waveref");
     this.key = key;
   }
-  
+
   @Override
   public Type<WaveSelectionEventHandler> getAssociatedType() {
     return TYPE;

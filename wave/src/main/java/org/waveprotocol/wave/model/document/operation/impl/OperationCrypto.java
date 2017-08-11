@@ -1,3 +1,22 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package org.waveprotocol.wave.model.document.operation.impl;
 
 import java.util.function.Function;
@@ -18,12 +37,21 @@ import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperationContext;
 
+/**
+ * Encrypts and decrypts Wavelet operations
+ *
+ * @author David Llop (llop@protonmail.com)
+ */
 public class OperationCrypto {
 
   private static final String CIPHER_TAG = "cipher/";
 
   public static WaveCryptoManager crypto = new WaveCryptoManager();
 
+  /**
+   * Attach every operation component the cursor visits in a
+   * {@code DocOpBuilder}.
+   */
   private static abstract class DocOpBuilderCursor implements DocOpCursor {
 
     protected DocOpBuilder builder = new DocOpBuilder();
@@ -84,6 +112,10 @@ public class OperationCrypto {
     }
   }
 
+  /**
+   * Replaces text in "characters" and "delete characters" components by
+   * asterisks (*) and collects the text in "characters" components in a string.
+   */
   private static class Obfuscator extends DocOpBuilderCursor {
 
     protected String collectedText = "";
@@ -112,6 +144,9 @@ public class OperationCrypto {
     }
   }
 
+  /**
+   * Replaces all texts present in characters components by the decrypted text.
+   */
   private static class Deobfuscator extends DocOpBuilderCursor {
 
     private String text;
@@ -129,6 +164,9 @@ public class OperationCrypto {
     }
   }
 
+  /**
+   * Counts how many positions the cursor spans.
+   */
   private static class Counter extends DocOpBuilderCursor {
 
     int count = 0;
@@ -154,6 +192,16 @@ public class OperationCrypto {
     }
   }
 
+  /**
+   * Encrypts a WaveletOperation
+   *
+   * @param waveId
+   * @param op
+   *          wavelet operation
+   * @param id
+   *          string that identifies this op
+   * @param callback
+   */
   public static void encrypt(String waveId, WaveletOperation op, String id,
       final Function<WaveletOperation, Void> callback) {
     CipherWrapper wrapper = new CipherWrapper();
@@ -161,26 +209,39 @@ public class OperationCrypto {
     if (dop == null) {
       callback.apply(op);
     } else {
-      encrypt(waveId, dop, id, (DocOp encryptedDop) -> callback.apply(wrapper.wrap(encryptedDop)));
+      encrypt(waveId, dop, id, (DocOp encryptedDop) -> callback.apply(wrapper.rewrap(encryptedDop)));
     }
   }
 
+  /**
+   * Decrypts a WaveletOperation
+   *
+   * @param waveId
+   * @param op
+   *          wavelet operation
+   * @param callback
+   */
   public static void decrypt(String waveId, WaveletOperation op, final Function<WaveletOperation, Void> callback) {
     CipherWrapper wrapper = new CipherWrapper();
     DocOp dop = wrapper.unwrap(op);
     if (dop == null) {
       callback.apply(op);
     } else {
-      decrypt(waveId, dop, (DocOp decryptedDop) -> callback.apply(wrapper.wrap(decryptedDop)));
+      decrypt(waveId, dop, (DocOp decryptedDop) -> callback.apply(wrapper.rewrap(decryptedDop)));
     }
   }
 
+  /**
+   * Unwraps and re-wraps a DocOp from a WaveletOperation.
+   *
+   * DocOps are wrapped inside BlipOperations and BlipOperations are wrapped
+   * inside WaveletOperations, so we need to save WaveletOperation and
+   * BlipOperation data to re-wrap.
+   *
+   */
   private static class CipherWrapper {
     private WaveletOperationContext context;
     private String blipId;
-
-    public CipherWrapper() {
-    }
 
     public DocOp unwrap(WaveletOperation op) {
       if (op instanceof WaveletBlipOperation) {
@@ -195,12 +256,21 @@ public class OperationCrypto {
       return null;
     }
 
-    public WaveletOperation wrap(DocOp dop) {
+    public WaveletOperation rewrap(DocOp dop) {
       BlipOperation bop = new BlipContentOperation(context, dop);
       return new WaveletBlipOperation(blipId, bop);
     }
   }
 
+  /**
+   * Adds a cipher/* annotation from the beginning to the end of the op with
+   * some text
+   *
+   * @param dop
+   * @param id
+   * @param text
+   * @return
+   */
   private static DocOp annotate(DocOp dop, String id, String text) {
     Counter counter = new Counter();
     dop.apply(counter);
@@ -214,6 +284,12 @@ public class OperationCrypto {
     return collector.composeAll();
   }
 
+  /**
+   * Removes the cipher/* annotation
+   *
+   * @param dop
+   * @return
+   */
   private static DocOp unannotate(DocOp dop) {
 
     if (cipherIndex(dop) < 0) {
@@ -244,6 +320,14 @@ public class OperationCrypto {
     return cursor.getNewDop(dop);
   }
 
+  /**
+   * Encrypts DocOp
+   *
+   * @param waveId
+   * @param dop
+   * @param id
+   * @param callback
+   */
   public static void encrypt(String waveId, DocOp dop, String id, final Function<DocOp, Void> callback) {
     Obfuscator cursor = new Obfuscator();
     DocOp obfuscatedDop = cursor.getNewDop(dop);
@@ -265,6 +349,13 @@ public class OperationCrypto {
     }
   }
 
+  /**
+   * Decrypts DocOp
+   *
+   * @param waveId
+   * @param dop
+   * @param callback
+   */
   public static void decrypt(String waveId, DocOp dop, final Function<DocOp, Void> callback) {
 
     int index = cipherIndex(dop);
@@ -290,6 +381,13 @@ public class OperationCrypto {
     });
   }
 
+  /**
+   * Returns the index of the change key that has a cipher/* tag of the first
+   * component of a DocOp
+   *
+   * @param dop
+   * @return
+   */
   private static int cipherIndex(DocOp dop) {
     if (dop.getType(0) != DocOpComponentType.ANNOTATION_BOUNDARY) {
       return -1;

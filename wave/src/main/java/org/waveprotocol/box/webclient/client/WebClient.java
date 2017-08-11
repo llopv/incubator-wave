@@ -353,12 +353,23 @@ public class WebClient implements EntryPoint {
     channel = new RemoteViewServiceMultiplexer(websocket, loggedInUser.getAddress());
   }
 
+  /**
+   * Gets wave key (if encrypted) and shows the wave in a wave panel.
+   *
+   * @param waveRef
+   *          wave id to open
+   * @param isNewWave
+   *          whether the wave is being created by this client session.
+   * @param participants
+   *          the participants to add to the newly created wave. {@code null} if
+   *          only the creator should be added
+   */
   private void openWave(WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants) {
 
     boolean encrypted = waveRef.getWaveId().getId().startsWith(IdConstants.ENCRYPTED_WAVE_PREFIX);
 
     if (!encrypted) {
-      openWave(waveRef, isNewWave, participants, null);
+      showWave(waveRef, isNewWave, participants, null);
     } else {
       String key;
 
@@ -366,7 +377,7 @@ public class WebClient implements EntryPoint {
 
         @Override
         public void onSuccess(String key) {
-          openWave(waveRef, isNewWave, participants, key);
+          showWave(waveRef, isNewWave, participants, key);
         }
 
         @Override
@@ -405,9 +416,9 @@ public class WebClient implements EntryPoint {
    *          the participants to add to the newly created wave. {@code null} if
    *          only the creator should be added
    * @param key
-   *          symmetric key
+   *          symmetric key (necessary if it is an encrypted wave)
    */
-  private void openWave(WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants, String key) {
+  private void showWave(WaveRef waveRef, boolean isNewWave, Set<ParticipantId> participants, String key) {
     final org.waveprotocol.box.stat.Timer timer = Timing.startRequest("Open Wave");
     LOG.info("WebClient.openWave()");
 

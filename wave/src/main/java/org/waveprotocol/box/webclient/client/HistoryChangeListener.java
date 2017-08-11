@@ -55,6 +55,7 @@ public class HistoryChangeListener {
           return;
         }
 
+        // Strip key
         String[] parts = encodedToken.split("!");
         String key = null;
         if (parts.length > 1) {
