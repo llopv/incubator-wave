@@ -20,7 +20,9 @@
 package org.waveprotocol.box.server.crypto;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.SortedMap;
@@ -31,6 +33,8 @@ import org.waveprotocol.wave.model.document.operation.Attributes;
 import org.waveprotocol.wave.model.document.operation.AttributesUpdate;
 import org.waveprotocol.wave.model.document.operation.DocOp;
 import org.waveprotocol.wave.model.document.operation.DocOpCursor;
+import org.waveprotocol.wave.model.id.ModernIdSerialiser;
+import org.waveprotocol.wave.model.id.WaveletId;
 import org.waveprotocol.wave.model.operation.wave.BlipContentOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
@@ -42,12 +46,16 @@ import com.google.gson.stream.JsonWriter;
 
 public class RecoverSnapshot {
 
+  private List<String> keys = new ArrayList<String>();
+  private Map<Integer, String> ciphertexts = new HashMap<Integer, String>();
+  TreeMap<Integer, Piece> pieceTree = new TreeMap<Integer, Piece>();
+
   private class Piece {
-    private long rev;
+    private int rev;
     private int len;
     private int offset = 0;
 
-    public Piece(long rev, int len, int offset) {
+    public Piece(int rev, int len, int offset) {
       this.rev = rev;
       this.len = len;
       this.offset = offset;
@@ -61,7 +69,7 @@ public class RecoverSnapshot {
       return new Piece(rev, endIndex - beginIndex, offset + beginIndex);
     }
 
-    public String getChars(Map<Long, String> ciphertexts) {
+    public String getChars(Map<Integer, String> ciphertexts) {
       return ciphertexts.get(rev).substring(offset, offset + len);
     }
 
@@ -72,13 +80,20 @@ public class RecoverSnapshot {
 
   }
 
-  private long registerChars(long key, String chars) {
-    ciphertexts.put(key, chars);
-    return key;
+  private class RecoverSnapshotJson {
+    public Map<Integer, String> ciphertexts;
+    public Map<Integer, Map<String, Integer>> pieces;
   }
 
-  private Map<Long, String> ciphertexts = new HashMap<Long, String>();
-  TreeMap<Integer, Piece> pieceTree = new TreeMap<Integer, Piece>();
+  private int registerChars(String string, String chars) {
+    if (keys.indexOf(string) < 0) {
+      keys.add(string);
+    }
+    int rev = keys.indexOf(string);
+    ciphertexts.put(rev, chars);
+    return rev;
+  }
+
 
   public void replay(WaveletOperation op) {
     if (op instanceof WaveletBlipOperation) {
@@ -95,7 +110,7 @@ public class RecoverSnapshot {
 
       int cursor = 0;
       int offset = 0;
-      long rev;
+      int rev;
 
       private void reindex(int len) {
         TreeMap<Integer, Piece> newTree = new TreeMap<Integer, Piece>();
@@ -138,8 +153,7 @@ public class RecoverSnapshot {
       public void annotationBoundary(AnnotationBoundaryMap map) {
         for (int i = 0; i < map.changeSize(); i++) {
           if (map.getChangeKey(i).startsWith("cipher/")) {
-            long key = Long.valueOf(map.getChangeKey(i).substring(7));
-            rev = registerChars(key, map.getNewValue(i));
+            rev = registerChars(map.getChangeKey(i), map.getNewValue(i));
           }
         }
       }
@@ -220,20 +234,21 @@ public class RecoverSnapshot {
     });
   }
 
-  public Map<Long, String> getCiphertexts() {
-    Map<Long, String> ciphertexts = new HashMap<Long, String>();
+  public Map<Integer, String> getCiphertexts() {
+    Map<Integer, String> ciphertexts = new HashMap<Integer, String>();
     for (Piece value : pieceTree.values()) {
       ciphertexts.put(value.rev, this.ciphertexts.get(value.rev));
     }
     return ciphertexts;
   }
 
-  public void toJson(JsonWriter writer) {
+  public void toJson(WaveletId waveletId, JsonWriter writer) {
     try {
       writer.beginObject();
+      writer.name("waveletId").value(ModernIdSerialiser.INSTANCE.serialiseWaveletId(waveletId));
       writer.name("ciphertexts");
       writer.beginObject();
-      for (Entry<Long, String> c : getCiphertexts().entrySet()) {
+      for (Entry<Integer, String> c : getCiphertexts().entrySet()) {
         writer.name(String.valueOf(c.getKey()));
         writer.value(c.getValue());
       }
@@ -254,11 +269,6 @@ public class RecoverSnapshot {
     } catch (IOException e) {
       throw new Error(e);
     }
-  }
-
-  private class RecoverSnapshotJson {
-    public Map<Long, String> ciphertexts;
-    public Map<Integer, Map<String, Integer>> pieces;
   }
 
   public RecoverSnapshot fromJson(JsonReader json) {

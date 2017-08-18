@@ -28,14 +28,14 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.junit.Test;
-import org.waveprotocol.box.webclient.client.WaveCryptoManager.Callback;
-import org.waveprotocol.box.webclient.client.WaveCryptoManager.Cipher;
+import org.waveprotocol.box.webclient.client.WaveCryptoManager;
 import org.waveprotocol.wave.model.document.operation.impl.AttributesImpl;
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMap;
 import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMapBuilder;
 import org.waveprotocol.wave.model.document.operation.DocOp;
 import org.waveprotocol.wave.model.document.operation.impl.DocOpBuilder;
 import org.waveprotocol.wave.model.document.operation.impl.OperationCrypto;
+import org.waveprotocol.wave.model.id.WaveletId;
 
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
@@ -44,27 +44,31 @@ import org.waveprotocol.box.server.crypto.RecoverSnapshot;
 
 public class RecoverSnapshotTest {
 
+  private class WaveCryptoManagerMock extends WaveCryptoManager {
+    public Cipher getCipher(String waveId) {
+      return new Cipher() {
+        @Override
+        public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback) {
+          callback.onSuccess(plaintext);
+        }
+
+        @Override
+        public void decrypt(String ciphertext, Callback<String, Object> callback) {
+          callback.onSuccess(ciphertext);
+        }
+      };
+    }
+  }
+
   private void encryptAll(DocOp[] dops, Function<DocOp[], Void> callback) {
 
     List<DocOp> encryptedDops = new ArrayList<DocOp>();
 
-    OperationCrypto opCrypto = OperationCrypto.create(new Cipher() {
-
-      @Override
-      public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback) {
-        callback.onSuccess(plaintext);
-      }
-
-      @Override
-      public void decrypt(String ciphertext, Callback<String, Object> callback) {
-        callback.onSuccess(ciphertext);
-      }
-
-    });
+    OperationCrypto.crypto = new WaveCryptoManagerMock();
 
     int i = 0;
     for (DocOp dop : dops) {
-      opCrypto.encrypt(dop, i++, new Function<DocOp, Void>() {
+      OperationCrypto.encrypt("", dop, String.valueOf(i++), new Function<DocOp, Void>() {
 
         @Override
         public Void apply(DocOp dop) {
@@ -90,9 +94,8 @@ public class RecoverSnapshotTest {
         StringWriter s = new StringWriter();
         JsonWriter writer = new JsonWriter(s);
 
-        snapshot.toJson(writer);
+        snapshot.toJson(WaveletId.of("local.net", "ew+123"), writer);
         String json = s.toString();
-        System.out.println(json);
 
         JsonReader reader = new JsonReader(new StringReader(json));
         snapshot = new RecoverSnapshot().fromJson(reader);

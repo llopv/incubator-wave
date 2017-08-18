@@ -34,6 +34,7 @@ import org.waveprotocol.box.server.waveserver.WaveServerException;
 import org.waveprotocol.box.server.waveserver.WaveletProvider;
 import org.waveprotocol.wave.model.id.IdURIEncoderDecoder;
 import org.waveprotocol.wave.model.id.ModernIdSerialiser;
+import org.waveprotocol.wave.model.id.WaveletId;
 import org.waveprotocol.wave.model.id.WaveletName;
 import org.waveprotocol.wave.model.operation.wave.TransformedWaveletDelta;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
@@ -50,14 +51,12 @@ import com.google.gson.stream.JsonWriter;
 import com.google.inject.Inject;
 
 /**
- * GET /crypto/snapshot/{waveletid}/{docid}
+ * GET /crypto/snapshot/{waveletid}
  *
  * List ciphertexts and document pieces needed to decrypt a document snapshot
  *
- *
  * @author pablojan@apache.org (Pablo Ojanguren)
  * @author llop@protonmail.com (David Llop)
- *
  */
 @SuppressWarnings("serial")
 @Singleton
@@ -66,16 +65,16 @@ public class SnapshotServlet extends HttpServlet {
 
   private static boolean NO_CACHE_RESPONSE = true;
 
-  private static class SnapshotBuilder implements Receiver<TransformedWaveletDelta> {
+  private static class SnapshotReplayer implements Receiver<TransformedWaveletDelta> {
 
     final RecoverSnapshot recoverService;
 
-    public SnapshotBuilder() {
+    public SnapshotReplayer() {
       this.recoverService = new RecoverSnapshot();
     }
 
-    public void toJson(JsonWriter writer) throws IOException {
-      recoverService.toJson(writer);
+    public void toJson(WaveletId waveletId, JsonWriter writer) throws IOException {
+      recoverService.toJson(waveletId, writer);
     }
 
     @Override
@@ -103,7 +102,7 @@ public class SnapshotServlet extends HttpServlet {
   @VisibleForTesting
   protected void doGet(HttpServletRequest req, HttpServletResponse response) throws IOException {
 
-    // This path will look like "/example.com/w+abc123/foo.com/conv+root
+    // This path will look like "/example.com/ew+abc123
     // Strip off the leading '/'.
     String urlPath = req.getPathInfo().substring(1);
 
@@ -127,25 +126,26 @@ public class SnapshotServlet extends HttpServlet {
     writer.beginObject();
 
     writer.name("waveId").value(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveRef.getWaveId()));
-    writer.name("waveletId").value(ModernIdSerialiser.INSTANCE.serialiseWaveletId(waveRef.getWaveletId()));
-    writer.name("snapshot");
+    writer.name("snapshots");
+    writer.beginArray();
 
-    SnapshotBuilder snapshotBuilder = new SnapshotBuilder();
-
-    WaveletName waveletName = WaveletName.of(waveRef.getWaveId(), waveRef.getWaveletId());
     try {
-      CommittedWaveletSnapshot committedSnaphot = waveletProvider.getSnapshot(waveletName);
-      waveletProvider.getHistory(waveletName, HASHER.createVersionZero(waveletName),
-          committedSnaphot.snapshot.getHashedVersion(), snapshotBuilder);
+      for (WaveletId waveletId: waveletProvider.getWaveletIds(waveRef.getWaveId())) {
+        SnapshotReplayer replayer = new SnapshotReplayer();
+        WaveletName waveletName = WaveletName.of(waveRef.getWaveId(), waveletId);
+        CommittedWaveletSnapshot committedSnaphot = waveletProvider.getSnapshot(waveletName);
+        waveletProvider.getHistory(waveletName, HASHER.createVersionZero(waveletName),
+            committedSnaphot.snapshot.getHashedVersion(), replayer);
+        replayer.toJson(waveletId, writer);
+      }
     } catch (WaveServerException e) {
       LOG.info("Error processing wavelet history", e);
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
       return;
     }
 
-    snapshotBuilder.toJson(writer);
+    writer.endArray();
     writer.endObject();
-
     writer.flush();
   }
 
