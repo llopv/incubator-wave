@@ -24,13 +24,31 @@ import org.waveprotocol.wave.concurrencycontrol.channel.WaveViewService.WaveView
 import org.waveprotocol.wave.concurrencycontrol.common.ChannelException;
 import org.waveprotocol.wave.concurrencycontrol.common.Recoverable;
 import org.waveprotocol.wave.concurrencycontrol.common.ResponseCode;
+import org.waveprotocol.wave.model.document.operation.DocInitialization;
+import org.waveprotocol.wave.model.document.operation.DocOpComponentType;
+import org.waveprotocol.wave.model.document.operation.impl.DocInitializationBuffer;
 import org.waveprotocol.wave.model.id.IdFilter;
+import org.waveprotocol.wave.model.id.ModernIdSerialiser;
 import org.waveprotocol.wave.model.id.WaveId;
 import org.waveprotocol.wave.model.id.WaveletId;
 import org.waveprotocol.wave.model.id.WaveletName;
 import org.waveprotocol.wave.model.operation.wave.WaveletDelta;
+import org.waveprotocol.wave.model.schema.SchemaProvider;
+import org.waveprotocol.wave.model.schema.conversation.ConversationSchemas;
 import org.waveprotocol.wave.model.util.Preconditions;
 import org.waveprotocol.wave.model.version.HashedVersion;
+import org.waveprotocol.wave.model.wave.data.DocumentFactory;
+import org.waveprotocol.wave.model.wave.data.DocumentOperationSink;
+import org.waveprotocol.wave.model.wave.data.ObservableWaveletData;
+import org.waveprotocol.wave.model.wave.data.impl.ObservablePluggableMutableDocument;
+import org.waveprotocol.wave.model.wave.data.impl.WaveletDataImpl;
+
+import com.google.gwt.core.client.Callback;
+import com.google.gwt.http.client.Request;
+import com.google.gwt.http.client.RequestBuilder;
+import com.google.gwt.http.client.RequestCallback;
+import com.google.gwt.http.client.RequestException;
+import com.google.gwt.http.client.Response;
 
 import java.util.HashMap;
 import java.util.List;
@@ -66,6 +84,8 @@ public class ViewChannelImpl implements ViewChannel, WaveViewService.OpenCallbac
    * recovery whilest the first pair is closing.
    */
   private static final int DEFAULT_MAX_VIEW_CHANNELS_PER_WAVE = 4;
+
+  private static final String CRYPTO_SNAPHSOT_URL = "/crypto/snapshot/";
 
   private static int maxViewChannelsPerWave = DEFAULT_MAX_VIEW_CHANNELS_PER_WAVE;
 
@@ -314,28 +334,19 @@ public class ViewChannelImpl implements ViewChannel, WaveViewService.OpenCallbac
           logger.trace().log("A non-first update contained a channel id: " + update);
         }
         if (openListener != null) {
-          WaveletId waveletId = update.hasWaveletId() ? update.getWaveletId() : null;
-          HashedVersion lastCommittedVersion = update.hasLastCommittedVersion() ?
-              update.getLastCommittedVersion() : null;
-          HashedVersion currentVersion = update.hasCurrentVersion() ?
-              update.getCurrentVersion() : null;
-          try {
-            if (update.hasWaveletSnapshot()) {
-              // it's a snapshot
-              openListener.onSnapshot(waveletId, update.getWaveletSnapshot(),
-                  lastCommittedVersion, currentVersion);
-            } else if (update.hasDeltas() || update.hasLastCommittedVersion() ||
-                update.hasCurrentVersion()) {
-              // it's deltas or versions.
-              openListener.onUpdate(waveletId, update.getDeltaList(),
-                  lastCommittedVersion, currentVersion);
-            }
-            if (update.hasMarker()) {
-              openListener.onOpenFinished();
-            }
-          } catch (ChannelException e) {
-            triggerOnException(e, waveletId);
-            terminate("View update raised exception: " + e.toString());
+          if (update.hasWaveletSnapshot()) {
+            downloadCryptoSnapshot(update, new Callback<ObservableWaveletData, Throwable>() {
+              @Override
+              public void onFailure(Throwable e) {
+                onException(new ChannelException(e.getMessage(), Recoverable.NOT_RECOVERABLE));
+              }
+              @Override
+              public void onSuccess(ObservableWaveletData snapshot) {
+                processSnapshotOrDeltaList(update, snapshot);
+              }
+            });
+          } else {
+            processSnapshotOrDeltaList(update, null);
           }
         }
         break;
@@ -362,6 +373,104 @@ public class ViewChannelImpl implements ViewChannel, WaveViewService.OpenCallbac
         break;
       default:
         Preconditions.illegalState("update in unknown state" + state);
+    }
+  }
+
+  private void downloadCryptoSnapshot(WaveViewServiceUpdate update,
+      Callback<ObservableWaveletData, Throwable> callback) {
+    ObservableWaveletData snapshot = update.getWaveletSnapshot();
+    DocumentFactory<?> contentFactory = new DocumentFactory<DocumentOperationSink>() {
+      @Override
+      public DocumentOperationSink create(WaveletId waveletId, String docId, DocInitialization content) {
+        DocInitializationBuffer buffer = new DocInitializationBuffer();
+        for (int i = 0; i < content.size(); i++) {
+          if (content.getType(i) == DocOpComponentType.CHARACTERS) {
+            buffer.characters(content.getCharactersString(i).replace('*', '+'));
+          } else {
+            content.applyComponent(i, buffer);
+          }
+        }
+        SchemaProvider schemas = new ConversationSchemas();
+        return ObservablePluggableMutableDocument.createFactory(schemas).create(waveletId, docId, buffer.finish());
+      }
+    };
+
+    ObservableWaveletData decrypted = WaveletDataImpl.Factory.create(contentFactory).create(snapshot);
+    callback.onSuccess(decrypted);
+  }
+
+  private void downloadCryptoSnapshot2(WaveViewServiceUpdate update, Callback<ObservableWaveletData, Throwable> callback) {
+    if (update.hasWaveletSnapshot()) {
+      try {
+        String waveletId = ModernIdSerialiser.INSTANCE.serialiseWaveletId(update.getWaveletId());
+        new RequestBuilder(RequestBuilder.GET, CRYPTO_SNAPHSOT_URL + waveletId).sendRequest("", new RequestCallback() {
+
+          @Override
+          public void onResponseReceived(Request request, Response response) {
+            if (response.getStatusCode() == 200) {
+
+              ObservableWaveletData snapshot = update.getWaveletSnapshot();
+              DocumentFactory<?> contentFactory = new DocumentFactory<DocumentOperationSink>() {
+                @Override
+                public DocumentOperationSink create(WaveletId waveletId, String docId, DocInitialization content) {
+                  DocInitializationBuffer buffer = new DocInitializationBuffer();
+                  for (int i = 0; i < content.size(); i++) {
+                    if (content.getType(i) == DocOpComponentType.CHARACTERS) {
+                      buffer.characters(content.getCharactersString(i).replace('*', '+'));
+                    } else {
+                      content.applyComponent(i, buffer);
+                    }
+                  }
+                  SchemaProvider schemas = new ConversationSchemas();
+                  return ObservablePluggableMutableDocument.createFactory(schemas).create(waveletId, docId,
+                      buffer.finish());
+                }
+              };
+
+              ObservableWaveletData decrypted = WaveletDataImpl.Factory.create(contentFactory).create(snapshot);
+              callback.onSuccess(decrypted);
+            }
+          }
+
+          @Override
+          public void onError(Request request, Throwable e) {
+            onException(new ChannelException("Decryption info not received" + " with error: " + e.getMessage(),
+                Recoverable.NOT_RECOVERABLE));
+          }
+
+        });
+      } catch (RequestException e) {
+        onException(new ChannelException("Decryption info not received" + " with error: " + e.getMessage(),
+            Recoverable.NOT_RECOVERABLE));
+      }
+    } else {
+      processSnapshotOrDeltaList(update, update.getWaveletSnapshot());
+    }
+  }
+
+  private void processSnapshotOrDeltaList(WaveViewServiceUpdate update, ObservableWaveletData snapshot) {
+    WaveletId waveletId = update.hasWaveletId() ? update.getWaveletId() : null;
+    HashedVersion lastCommittedVersion = update.hasLastCommittedVersion() ?
+        update.getLastCommittedVersion() : null;
+    HashedVersion currentVersion = update.hasCurrentVersion() ?
+        update.getCurrentVersion() : null;
+    try {
+      if (snapshot != null) {
+        // it's a snapshot
+        openListener.onSnapshot(waveletId, snapshot,
+            lastCommittedVersion, currentVersion);
+      } else if (update.hasDeltas() || update.hasLastCommittedVersion() ||
+          update.hasCurrentVersion()) {
+        // it's deltas or versions.
+        openListener.onUpdate(waveletId, update.getDeltaList(),
+            lastCommittedVersion, currentVersion);
+      }
+      if (update.hasMarker()) {
+        openListener.onOpenFinished();
+      }
+    } catch (ChannelException e) {
+      triggerOnException(e, waveletId);
+      terminate("View update raised exception: " + e.toString());
     }
   }
 
