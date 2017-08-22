@@ -25,6 +25,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 import org.junit.Test;
@@ -35,7 +36,9 @@ import org.waveprotocol.wave.model.document.operation.AnnotationBoundaryMapBuild
 import org.waveprotocol.wave.model.document.operation.DocOp;
 import org.waveprotocol.wave.model.document.operation.impl.DocOpBuilder;
 import org.waveprotocol.wave.model.document.operation.impl.OperationCrypto;
-import org.waveprotocol.wave.model.id.WaveletId;
+import org.waveprotocol.wave.model.operation.wave.BlipContentOperation;
+import org.waveprotocol.wave.model.operation.wave.WaveletBlipOperation;
+import org.waveprotocol.wave.model.operation.wave.WaveletOperationContext;
 
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
@@ -89,17 +92,22 @@ public class RecoverSnapshotTest {
       public Void apply(DocOp[] dops) {
         RecoverSnapshot snapshot = new RecoverSnapshot();
         for (DocOp dop : dops) {
-          snapshot.replay(dop);
+          BlipContentOperation bop = new BlipContentOperation(new WaveletOperationContext(null, 0, 0), dop);
+          WaveletBlipOperation wop = new WaveletBlipOperation("blipID", bop);
+          snapshot.replay(wop);
         }
         StringWriter s = new StringWriter();
         JsonWriter writer = new JsonWriter(s);
 
-        snapshot.toJson(WaveletId.of("local.net", "ew+123"), writer);
+        snapshot.toJson(writer);
         String json = s.toString();
 
         JsonReader reader = new JsonReader(new StringReader(json));
         snapshot = new RecoverSnapshot().fromJson(reader);
-        assertEquals(expected, snapshot.reconstitute());
+
+        // texts = ciphertexts in this test
+        Map<String, Map<Integer, String>> texts = snapshot.getCiphertexts();
+        assertEquals(expected, snapshot.reconstitute(texts).get("blipID"));
         return null;
       }
     });
