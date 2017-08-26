@@ -132,7 +132,7 @@ public class UserManagerTest extends TestCase {
     OpenListener listener = mock(OpenListener.class);
     m.subscribe(W1, IdFilters.ALL_IDS, "ch", listener);
     m.onUpdate(W1A, DELTAS);
-    verify(listener).onUpdate(W1A, null, DELTAS, null, null, "ch");
+    verify(listener).onUpdate(W1A, null, DELTAS, null, null, "ch", null);
   }
 
   /**
@@ -146,15 +146,15 @@ public class UserManagerTest extends TestCase {
 
     DeltaSequence bothDeltas =  DeltaSequence.of(DELTA, delta2);
     m.onUpdate(W1A, bothDeltas);
-    verify(listener).onUpdate(W1A, null, bothDeltas, null, null, "ch1");
+    verify(listener).onUpdate(W1A, null, bothDeltas, null, null, "ch1", null);
 
     // Also succeeds when sending the two deltas via separate onUpdates()
     DeltaSequence delta2Sequence = DeltaSequence.of(delta2);
     m.subscribe(W2, IdFilters.ALL_IDS, "ch2", listener);
     m.onUpdate(W2A, DELTAS);
     m.onUpdate(W2A, DeltaSequence.of(delta2));
-    verify(listener).onUpdate(W2A, null, DELTAS, null, null, "ch2");
-    verify(listener).onUpdate(W2A, null, delta2Sequence, null, null, "ch2");
+    verify(listener).onUpdate(W2A, null, DELTAS, null, null, "ch2", null);
+    verify(listener).onUpdate(W2A, null, delta2Sequence, null, null, "ch2", null);
   }
 
   /**
@@ -169,7 +169,7 @@ public class UserManagerTest extends TestCase {
     verifyZeroInteractions(listener);
 
     m.submitResponse("ch", W1A, V3); // V3 not the same as update delta.
-    verify(listener).onUpdate(W1A, null, DELTAS, null, null, "ch");
+    verify(listener).onUpdate(W1A, null, DELTAS, null, null, "ch", null);
   }
 
   /**

@@ -214,4 +214,8 @@ public class IdUtil implements IdConstants {
   public static String join(String... tokens) {
     return SimplePrefixEscaper.DEFAULT_ESCAPER.join(TOKEN_SEPARATOR, tokens);
   }
+  
+  public static boolean isEncryptedWaveId(WaveId id) {
+	  return id.getId().startsWith(ENCRYPTED_WAVE_PREFIX+TOKEN_SEPARATOR);
+  }
 }

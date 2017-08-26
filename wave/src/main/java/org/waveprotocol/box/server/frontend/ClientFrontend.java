@@ -20,6 +20,7 @@
 package org.waveprotocol.box.server.frontend;
 
 import org.waveprotocol.box.common.comms.WaveClientRpc;
+import org.waveprotocol.box.server.crypto.RecoverSnapshot;
 import org.waveprotocol.box.server.waveserver.WaveletProvider.SubmitRequestListener;
 import org.waveprotocol.wave.federation.Proto.ProtocolWaveletDelta;
 import org.waveprotocol.wave.model.id.IdFilter;
@@ -55,10 +56,11 @@ public interface ClientFrontend {
      * @param committedVersion optional commit notice
      * @param marker optional (true/false/absent) marker
      * @param channelId channel id (first message only)
+     * @param encryptedSnapshot encrypted delta pieces to decipher the snapshot (optional)
      */
     void onUpdate(WaveletName waveletName, @Nullable CommittedWaveletSnapshot snapshot,
         List<TransformedWaveletDelta> deltas, @Nullable HashedVersion committedVersion,
-        @Nullable Boolean marker, String channelId);
+        @Nullable Boolean marker, String channelId, @Nullable RecoverSnapshot encryptedSnapshot);
 
     /**
      * Called when the stream fails. No further updates will be received.

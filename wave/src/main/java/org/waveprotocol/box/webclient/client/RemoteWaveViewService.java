@@ -21,10 +21,18 @@ package org.waveprotocol.box.webclient.client;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gwt.core.client.Callback;
+import com.google.gwt.http.client.Request;
+import com.google.gwt.http.client.RequestBuilder;
+import com.google.gwt.http.client.RequestCallback;
+import com.google.gwt.http.client.RequestException;
+import com.google.gwt.http.client.Response;
 
+import org.waveprotocol.box.common.comms.DocumentEncryptedData;
 import org.waveprotocol.box.common.comms.DocumentSnapshot;
 import org.waveprotocol.box.common.comms.ProtocolSubmitResponse;
 import org.waveprotocol.box.common.comms.ProtocolWaveletUpdate;
+import org.waveprotocol.box.common.comms.WaveletEncryptedData;
 import org.waveprotocol.box.common.comms.WaveletSnapshot;
 import org.waveprotocol.box.common.comms.jso.ProtocolSubmitRequestJsoImpl;
 import org.waveprotocol.box.common.comms.jso.ProtocolWaveletUpdateJsoImpl;
@@ -37,9 +45,12 @@ import org.waveprotocol.wave.federation.ProtocolHashedVersion;
 import org.waveprotocol.wave.federation.ProtocolWaveletDelta;
 import org.waveprotocol.wave.federation.jso.ProtocolWaveletDeltaJsoImpl;
 import org.waveprotocol.wave.model.document.operation.DocInitialization;
+import org.waveprotocol.wave.model.document.operation.DocOpComponentType;
+import org.waveprotocol.wave.model.document.operation.impl.DocInitializationBuffer;
 import org.waveprotocol.wave.model.document.operation.impl.DocOpUtil;
 import org.waveprotocol.wave.model.id.IdFilter;
 import org.waveprotocol.wave.model.id.IdURIEncoderDecoder;
+import org.waveprotocol.wave.model.id.IdUtil;
 import org.waveprotocol.wave.model.id.InvalidIdException;
 import org.waveprotocol.wave.model.id.ModernIdSerialiser;
 import org.waveprotocol.wave.model.id.WaveId;
@@ -58,9 +69,12 @@ import org.waveprotocol.wave.model.wave.data.ObservableWaveletData;
 import org.waveprotocol.wave.model.wave.data.impl.WaveletDataImpl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import org.waveprotocol.box.stat.AsyncCallContext;
 
@@ -146,7 +160,7 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
 
     @Override
     public ObservableWaveletData getWaveletSnapshot() {
-      return snapshot == null ? snapshot = deserialize(waveId, update.getSnapshot()) : snapshot;
+      return snapshot == null ? snapshot = deserialize(waveId, update.getSnapshot(), update.getEncryptedSnapshot()) : snapshot;
     }
 
     @Override
@@ -172,7 +186,7 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
     void updateHistory(WaveletName wavelet, ProtocolHashedVersion update) {
       ProtocolHashedVersion current = versions.get(wavelet);
       if (current != null && current.getVersion() > update.getVersion()) {
-        LOG.info("Ignoring superceded hash update: " + update);
+        LOG.info("Ignoring superceded hash update: " + wavelet.toString() + " => "+ update.getVersion());
         return;
       }
       versions.put(wavelet, update);
@@ -372,8 +386,17 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
       ProtocolHashedVersion end) {
     return WaveletOperationSerializer.deserialize(delta, deserialize(end));
   }
-
-  private ObservableWaveletData deserialize(WaveId waveId, WaveletSnapshot snapshot) {
+  
+  /**
+   * Deserialize a snaphost received as a RPC proto object. Decrypt documents if encrypted wavelet
+   * data is available. 
+   * 
+   * @param waveId
+   * @param snapshot
+   * @param waveletEncryptedData
+   * @return
+   */
+  private ObservableWaveletData deserialize(WaveId waveId, WaveletSnapshot snapshot, WaveletEncryptedData waveletEncryptedData) {
     WaveletId id;
     try {
       id = ModernIdSerialiser.INSTANCE.deserialiseWaveletId(snapshot.getWaveletId());
@@ -391,8 +414,22 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
     for (String participant : snapshot.getParticipantId()) {
       waveletData.addParticipant(new ParticipantId(participant));
     }
+    
+    boolean isEncryptedWave = IdUtil.isEncryptedWaveId(waveId) && waveletEncryptedData != null;
+    Map<String, DocumentEncryptedData> docEncryptedDataMap = new HashMap<String, DocumentEncryptedData>();
+    if (isEncryptedWave) {    
+    	waveletEncryptedData.getDocumentData().forEach(docEncryptedData -> {
+    		docEncryptedDataMap.put(docEncryptedData.getDocumentId(), docEncryptedData);
+    	});    	
+    }
+    
     for (DocumentSnapshot docSnapshot : snapshot.getDocument()) {
-      deserialize(waveletData, docSnapshot);
+     
+      // Deserialize only if there is encrypted data for the doc 
+      if (docEncryptedDataMap.containsKey(docSnapshot.getDocumentId()))
+       deserializeEncrypted(waveletData, docSnapshot, docEncryptedDataMap.get(docSnapshot.getDocumentId()));
+      else
+       deserialize(waveletData, docSnapshot);
     }
     return waveletData;
   }
@@ -411,7 +448,54 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
     long lmv = docSnapshot.getLastModifiedVersion();
     waveletData.createDocument(docId, author, contributors, content, lmt, lmv);
   }
+  
+  /**
+   * Deserialize and decrypt a wavelet's encrypted document from a RPC proto object
+   * 
+   * @param waveletData the wavelet data object containing documents
+   * @param docSnapshot proto object having the obfusctated document 
+   * @param documentEncryptedData proto object having the encrypted data of the document
+   */
+  private static void deserializeEncrypted(WaveletDataImpl waveletData, DocumentSnapshot docSnapshot, DocumentEncryptedData documentEncryptedData) {
+	    
+	DocInitialization obfuscatedDocInit =
+        DocOpUtil.asInitialization(WaveletOperationSerializer.deserialize(docSnapshot
+            .getDocumentOperation()));
+	
+	DocInitialization decryptedDocInit = decryptDocInitialization(obfuscatedDocInit, documentEncryptedData);
+    
+    String docId = docSnapshot.getDocumentId();
+    ParticipantId author = ParticipantId.ofUnsafe(docSnapshot.getAuthor());
+    List<ParticipantId> contributors = Lists.newArrayList();
+    for (String contributor : docSnapshot.getContributor()) {
+      contributors.add(ParticipantId.ofUnsafe(contributor));
+    }
+    long lmt = docSnapshot.getLastModifiedTime();
+    long lmv = docSnapshot.getLastModifiedVersion();
+    waveletData.createDocument(docId, author, contributors, decryptedDocInit, lmt, lmv);	  
+	  
+  }
 
+  
+  /**
+   * Decrypt operations of a document initialization using encrypted data of the document.
+   * 
+   * @param encryptedContent  
+   * @param decryptedDocData
+   * @return
+   */
+  private static DocInitialization decryptDocInitialization(DocInitialization encryptedContent, DocumentEncryptedData decryptedDocData) {
+	  DocInitializationBuffer buffer = new DocInitializationBuffer();
+      for (int i = 0; i < encryptedContent.size(); i++) {
+        if (encryptedContent.getType(i) == DocOpComponentType.CHARACTERS) {
+          buffer.characters(encryptedContent.getCharactersString(i).replace('*', '+'));
+        } else {
+        	encryptedContent.applyComponent(i, buffer);
+        }
+      }
+      return buffer.finish();
+  }
+  
   private static String serialize(WaveletName wavelet) {
     return RemoteViewServiceMultiplexer.serialize(wavelet);
   }

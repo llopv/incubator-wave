@@ -223,7 +223,7 @@ final class WaveViewSubscription {
       HashedVersion committedVersion) {
     // Channel id needs to be sent with every message until views can be
     // closed, see bug 128.
-    openListener.onUpdate(waveletName, null, deltas, committedVersion, null, channelId);
+    openListener.onUpdate(waveletName, null, deltas, committedVersion, null, channelId, null);
   }
 
   /**

@@ -134,6 +134,34 @@ message WaveViewSnapshot {
   repeated WaveletSnapshot wavelet = 2;
 }
 
+//
+// Ciphertexts and metadata to decrypt snapshots on clients
+//
+
+message CipherText {
+	required int64 index = 1;
+	required string ciphertext = 2;
+}
+
+message CipherPiece {
+	required int64 index = 1;
+	required int32 op = 2;
+	required int32 length = 3;
+	required int32 offset = 4;
+}
+
+message DocumentEncryptedData {
+  required string document_id = 1;
+  repeated CipherText cipher_text = 2;
+  repeated CipherPiece cipher_part = 3;
+}
+
+message WaveletEncryptedData {
+  required string wavelet_id = 1;
+  repeated DocumentEncryptedData document_data = 2;
+}
+
+
 /**
  * Update message for a wave view.
  * Contains either:
@@ -175,6 +203,10 @@ message ProtocolWaveletUpdate {
   // Channel id, set only in the first update to a client.
   // The client includes it in submits.
   optional string channel_id = 7;
+  
+  // Encrypted data to decipher snapshots in client.
+  optional WaveletEncryptedData encrypted_snapshot = 8;
+  
 }
 
 /**

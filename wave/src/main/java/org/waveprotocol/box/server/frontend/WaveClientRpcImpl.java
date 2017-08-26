@@ -32,9 +32,12 @@ import org.waveprotocol.box.common.comms.WaveClientRpc.ProtocolWaveClientRpc;
 import org.waveprotocol.box.common.comms.WaveClientRpc.ProtocolWaveletUpdate;
 import org.waveprotocol.box.server.common.CoreWaveletOperationSerializer;
 import org.waveprotocol.box.server.common.SnapshotSerializer;
+import org.waveprotocol.box.server.crypto.RecoverSnapshot;
+import org.waveprotocol.box.server.crypto.RecoverSnapshotSerializer;
 import org.waveprotocol.box.server.rpc.ServerRpcController;
 import org.waveprotocol.box.server.waveserver.WaveletProvider.SubmitRequestListener;
 import org.waveprotocol.wave.model.id.IdFilter;
+import org.waveprotocol.wave.model.id.IdUtil;
 import org.waveprotocol.wave.model.id.InvalidIdException;
 import org.waveprotocol.wave.model.id.ModernIdSerialiser;
 import org.waveprotocol.wave.model.id.WaveId;
@@ -106,7 +109,8 @@ public class WaveClientRpcImpl implements ProtocolWaveClientRpc.Interface {
           @Override
           public void onUpdate(WaveletName waveletName,
               @Nullable CommittedWaveletSnapshot snapshot, List<TransformedWaveletDelta> deltas,
-              @Nullable HashedVersion committedVersion, Boolean hasMarker, String channel_id) {
+              @Nullable HashedVersion committedVersion, Boolean hasMarker, String channel_id,
+              @Nullable RecoverSnapshot encryptedWaveletData) {
             ProtocolWaveletUpdate.Builder builder = ProtocolWaveletUpdate.newBuilder();
             if (hasMarker != null) {
               builder.setMarker(hasMarker.booleanValue());
@@ -134,6 +138,11 @@ public class WaveClientRpcImpl implements ProtocolWaveClientRpc.Interface {
                   snapshot.snapshot.getHashedVersion()));
               builder.setCommitNotice(CoreWaveletOperationSerializer.serialize(
                   snapshot.committedVersion));
+              
+              if (encryptedWaveletData != null) {
+            	  builder.setEncryptedSnapshot(RecoverSnapshotSerializer.serialize(waveletName, encryptedWaveletData));
+              }
+              
             } else {
               if (committedVersion != null) {
                 builder.setCommitNotice(

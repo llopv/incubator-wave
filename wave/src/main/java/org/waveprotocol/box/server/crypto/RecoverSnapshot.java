@@ -52,17 +52,18 @@ import com.google.gwt.thirdparty.guava.common.base.Preconditions;
  */
 public class RecoverSnapshot {
 
-  private HashMap<String, PieceTree> trees = new HashMap<String, PieceTree>();
+  /** Each wavelet's document has a tree of pieces */
+  protected HashMap<String, PieceTree> trees = new HashMap<String, PieceTree>();
 
   /**
    * Represents a piece of the original plaintext. It is a black boxed string:
    * its contents are unknown, but it stores the length and offset with respect
    * to the original string.
    */
-  private class Piece {
-    private int opId;
-    private int len;
-    private int offset = 0;
+  protected class Piece {
+    protected int opId;
+    protected int len;
+    protected int offset = 0;
 
     public Piece(int cipherId, int len, int offset) {
       this.opId = cipherId;
@@ -87,7 +88,7 @@ public class RecoverSnapshot {
    * Represents the state of a document. Monitors which part of it corresponds
    * to which ciphertext.
    */
-  private class PieceTree {
+  protected class PieceTree {
 
     /**
      * Stores cipher/* annotation ids.

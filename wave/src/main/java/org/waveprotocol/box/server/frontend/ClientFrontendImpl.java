@@ -23,13 +23,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 
 import org.waveprotocol.box.common.DeltaSequence;
+import org.waveprotocol.box.common.Receiver;
 import org.waveprotocol.box.common.comms.WaveClientRpc;
+import org.waveprotocol.box.server.crypto.RecoverSnapshot;
 import org.waveprotocol.box.server.waveserver.WaveBus;
 import org.waveprotocol.box.server.waveserver.WaveServerException;
 import org.waveprotocol.box.server.waveserver.WaveletProvider;
 import org.waveprotocol.box.server.waveserver.WaveletProvider.SubmitRequestListener;
 import org.waveprotocol.wave.federation.Proto.ProtocolWaveletDelta;
 import org.waveprotocol.wave.model.id.IdFilter;
+import org.waveprotocol.wave.model.id.IdURIEncoderDecoder;
+import org.waveprotocol.wave.model.id.IdUtil;
 import org.waveprotocol.wave.model.id.WaveId;
 import org.waveprotocol.wave.model.id.WaveletId;
 import org.waveprotocol.wave.model.id.WaveletName;
@@ -38,8 +42,11 @@ import org.waveprotocol.wave.model.operation.wave.RemoveParticipant;
 import org.waveprotocol.wave.model.operation.wave.TransformedWaveletDelta;
 import org.waveprotocol.wave.model.operation.wave.WaveletOperation;
 import org.waveprotocol.wave.model.version.HashedVersion;
+import org.waveprotocol.wave.model.version.HashedVersionFactory;
+import org.waveprotocol.wave.model.version.HashedVersionZeroFactoryImpl;
 import org.waveprotocol.wave.model.wave.ParticipantId;
 import org.waveprotocol.wave.model.wave.data.ReadableWaveletData;
+import org.waveprotocol.wave.util.escapers.jvm.JavaUrlCodec;
 import org.waveprotocol.wave.util.logging.Log;
 
 import java.util.Collection;
@@ -55,6 +62,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ClientFrontendImpl implements ClientFrontend, WaveBus.Subscriber {
   private static final Log LOG = Log.get(ClientFrontendImpl.class);
+
+  HashedVersionFactory HASHER = new HashedVersionZeroFactoryImpl(new IdURIEncoderDecoder(new JavaUrlCodec()));
 
   private final static AtomicInteger channel_counter = new AtomicInteger(0);
 
@@ -152,16 +161,47 @@ public class ClientFrontendImpl implements ClientFrontend, WaveBus.Subscriber {
         openListener.onFailure("Wave server failure retrieving wavelet");
         return;
       }
+      
+      boolean isEncrypted =  IdUtil.isEncryptedWaveId(waveId) &&
+    		  				 snapshotToSend != null;
+    		  				 
+      RecoverSnapshot encryptedWaveletData = new RecoverSnapshot();
+      // Send snapshot encrypted data
+      if (isEncrypted) {
+    	      	      	  
+          try {
+        	  
+        	long t0 = System.currentTimeMillis();
+			waveletProvider.getHistory(waveletName, HASHER.createVersionZero(waveletName),
+					  snapshotToSend.snapshot.getHashedVersion(), new Receiver<TransformedWaveletDelta>() {
 
+						@Override
+						public boolean put(TransformedWaveletDelta delta) {
+							 for (WaveletOperation wop : delta) {
+								 encryptedWaveletData.replay(wop);
+							      }
+							 return true;						
+						}        	  
+			  });
+			
+	          long t1 = System.currentTimeMillis();
+	          LOG.info("encrypted snapshot in response ("+ (t1 - t0) +"ms)");
+	          
+		} catch (WaveServerException e) {
+			LOG.warning("Exception building encrypted snapshot: ",e);
+		}
+
+      }
+      
       LOG.info("snapshot in response is: " + (snapshotToSend != null));
       if (snapshotToSend == null) {
         // Send deltas.
         openListener.onUpdate(waveletName, snapshotToSend, DeltaSequence.empty(), null, null,
-            channelId);
+            channelId, null);
       } else {
         // Send the snapshot.
         openListener.onUpdate(waveletName, snapshotToSend, DeltaSequence.empty(),
-            snapshotToSend.committedVersion, null, channelId);
+            snapshotToSend.committedVersion, null, channelId, encryptedWaveletData);
       }
     }
 
@@ -169,10 +209,10 @@ public class ClientFrontendImpl implements ClientFrontend, WaveBus.Subscriber {
     if (waveletIds.size() == 0) {
       // Send message with just the channel id.
       LOG.info("sending just a channel id for " + dummyWaveletName);
-      openListener.onUpdate(dummyWaveletName, null, DeltaSequence.empty(), null, null, channelId);
+      openListener.onUpdate(dummyWaveletName, null, DeltaSequence.empty(), null, null, channelId, null);
     }
     LOG.info("sending marker for " + dummyWaveletName);
-    openListener.onUpdate(dummyWaveletName, null, DeltaSequence.empty(), null, true, null);
+    openListener.onUpdate(dummyWaveletName, null, DeltaSequence.empty(), null, true, null, null);
   }
 
   private String generateChannelID() {

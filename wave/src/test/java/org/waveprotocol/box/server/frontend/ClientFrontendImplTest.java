@@ -44,6 +44,7 @@ import org.waveprotocol.box.common.DeltaSequence;
 import org.waveprotocol.box.common.ExceptionalIterator;
 import org.waveprotocol.box.common.comms.WaveClientRpc.WaveletVersion;
 import org.waveprotocol.box.server.common.CoreWaveletOperationSerializer;
+import org.waveprotocol.box.server.crypto.RecoverSnapshot;
 import org.waveprotocol.box.server.frontend.ClientFrontend.OpenListener;
 import org.waveprotocol.box.server.util.WaveletDataUtil;
 import org.waveprotocol.box.server.waveserver.WaveServerException;
@@ -154,9 +155,9 @@ public class ClientFrontendImplTest extends TestCase {
 
     OpenListener listener = openWave(IdFilters.ALL_IDS);
     verify(listener).onUpdate(eq(WN1), eq(snapshot1), eq(DeltaSequence.empty()),
-        eq(V0), isNullMarker(), any(String.class));
+        eq(V0), isNullMarker(), any(String.class), isAnyEncryptedData());
     verify(listener).onUpdate(eq(WN2), eq(snapshot2), eq(DeltaSequence.empty()),
-        eq(V0), isNullMarker(), any(String.class));
+        eq(V0), isNullMarker(), any(String.class), isAnyEncryptedData());
     verifyMarker(listener, WAVE_ID);
   }
 
@@ -174,7 +175,7 @@ public class ClientFrontendImplTest extends TestCase {
     clientFrontend.waveletUpdate(wavelet, DELTAS);
     verify(listener, Mockito.never()).onUpdate(eq(WN1),
         any(CommittedWaveletSnapshot.class), Matchers.anyList(),
-        any(HashedVersion.class), isNullMarker(), anyString());
+        any(HashedVersion.class), isNullMarker(), anyString(), isNullEncryptedData());
   }
 
   /**
@@ -187,7 +188,7 @@ public class ClientFrontendImplTest extends TestCase {
 
     OpenListener listener = openWave(IdFilters.ALL_IDS);
     verify(listener).onUpdate(eq(WN1), eq(snapshot), eq(DeltaSequence.empty()),
-        eq(V0), isNullMarker(), any(String.class));
+        eq(V0), isNullMarker(), any(String.class), isAnyEncryptedData());
     verifyMarker(listener, WAVE_ID);
 
     TransformedWaveletDelta delta = TransformedWaveletDelta.cloneOperations(USER, V2, 1234567890L,
@@ -195,7 +196,7 @@ public class ClientFrontendImplTest extends TestCase {
     DeltaSequence deltas = DeltaSequence.of(delta);
     clientFrontend.waveletUpdate(snapshot.snapshot, deltas);
     verify(listener).onUpdate(eq(WN1), isNullSnapshot(), eq(deltas),
-        isNullVersion(), isNullMarker(), anyString());
+        isNullVersion(), isNullMarker(), anyString(), isNullEncryptedData());
   }
 
   /**
@@ -247,7 +248,7 @@ public class ClientFrontendImplTest extends TestCase {
     verify(listener, Mockito.never()).onUpdate(eq(dummyWaveletName),
         any(CommittedWaveletSnapshot.class),
         isDeltasStartingAt(0),
-        any(HashedVersion.class), isNullMarker(), anyString());
+        any(HashedVersion.class), isNullMarker(), anyString(), isNullEncryptedData());
   }
 
   /**
@@ -302,7 +303,7 @@ public class ClientFrontendImplTest extends TestCase {
   private static String verifyChannelId(OpenListener listener) {
     ArgumentCaptor<String> channelIdCaptor = ArgumentCaptor.forClass(String.class);
     verify(listener).onUpdate(any(WaveletName.class), isNullSnapshot(), eq(DeltaSequence.empty()),
-        isNullVersion(), isNullMarker(), channelIdCaptor.capture());
+        isNullVersion(), isNullMarker(), channelIdCaptor.capture(), isNullEncryptedData());
     return channelIdCaptor.getValue();
   }
 
@@ -312,7 +313,7 @@ public class ClientFrontendImplTest extends TestCase {
   private static void verifyMarker(OpenListener listener, WaveId waveId) {
     ArgumentCaptor<WaveletName> waveletNameCaptor = ArgumentCaptor.forClass(WaveletName.class);
     verify(listener).onUpdate(waveletNameCaptor.capture(), isNullSnapshot(),
-        eq(DeltaSequence.empty()), isNullVersion(), eq(true), (String) Mockito.isNull());
+        eq(DeltaSequence.empty()), isNullVersion(), eq(true), (String) Mockito.isNull(), isNullEncryptedData());
     assertEquals(waveId, waveletNameCaptor.getValue().waveId);
   }
 
@@ -326,6 +327,14 @@ public class ClientFrontendImplTest extends TestCase {
 
   private static Boolean isNullMarker() {
     return (Boolean) Mockito.isNull();
+  }
+  
+  private static RecoverSnapshot isNullEncryptedData() {
+	  return (RecoverSnapshot) Mockito.isNull();
+  }
+  
+  private static RecoverSnapshot isAnyEncryptedData() {
+	  return Mockito.any(RecoverSnapshot.class);
   }
 
   private static List<TransformedWaveletDelta> isDeltasStartingAt(final long version) {
