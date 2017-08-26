@@ -21,12 +21,14 @@ package org.waveprotocol.box.webclient.client;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.waveprotocol.box.webclient.client.jsinterop.AlgorithmIdentifier;
 import org.waveprotocol.box.webclient.client.jsinterop.Crypto;
 import org.waveprotocol.box.webclient.client.jsinterop.JsonWebKey;
 import org.waveprotocol.box.webclient.client.jsinterop.JsonWebKeyImpl;
 import org.waveprotocol.box.webclient.client.jsinterop.NativeWindow;
+import org.waveprotocol.box.webclient.client.jsinterop.Promise;
 import org.waveprotocol.wave.model.id.ModernIdSerialiser;
 import org.waveprotocol.wave.model.id.WaveId;
 import org.waveprotocol.wave.model.util.Preconditions;
@@ -57,9 +59,11 @@ public class WaveCryptoManager {
   }
 
   public interface Cipher {
-    public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback);
+    public void encrypt(String plaintext, String additionalData, Callback<String, Throwable> callback);
 
-    public void decrypt(String ciphertext, Callback<String, Object> callback);
+    public void decrypt(String ciphertext, Callback<String, Throwable> callback);
+
+    public void decryptAll(Map<Integer, String> ciphertexts, Callback<Map<Integer, String>, Throwable> callback);
 
   }
 
@@ -114,10 +118,10 @@ public class WaveCryptoManager {
       keysRegistry.put(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId), cryptoKey);
       Crypto.subtle.exportKey(CRYPTO_KEY_FORMAT, cryptoKey).then((JsonWebKey key) -> {
         callback.onSuccess(key.k);
-      }, (Object reason) -> {
+      }, (Throwable reason) -> {
         callback.onFailure(reason);
       });
-    }, (Object reason) -> {
+    }, (Throwable reason) -> {
       callback.onFailure(reason);
     });
 
@@ -134,7 +138,7 @@ public class WaveCryptoManager {
     Crypto.subtle.importKey(CRYPTO_KEY_FORMAT, keyData, algorithm, true, CRYPTO_KEY_USAGES).then((Object cryptoKey) -> {
       keysRegistry.put(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId), cryptoKey);
       callback.onSuccess(key);
-    }, (Object reason) -> {
+    }, (Throwable reason) -> {
       callback.onFailure(reason);
     });
   }
@@ -147,7 +151,7 @@ public class WaveCryptoManager {
     }
     Crypto.subtle.exportKey(CRYPTO_KEY_FORMAT, cryptoKey).then((JsonWebKey key) -> {
       callback.onSuccess(key.k);
-    }, (Object reason) -> {
+    }, (Throwable reason) -> {
       callback.onFailure(reason);
     });
   }
@@ -158,7 +162,7 @@ public class WaveCryptoManager {
       final Object cryptoKey = keysRegistry.get(waveId);
 
       @Override
-      public void encrypt(String plaintext, String additionalDataStr, Callback<String, Object> callback) {
+      public void encrypt(String plaintext, String additionalDataStr, Callback<String, Throwable> callback) {
         Preconditions.checkNotNull(cryptoKey, "CryptoKey is not registered");
 
         ArrayBuffer data = stringToArrayBuffer(plaintext);
@@ -170,26 +174,49 @@ public class WaveCryptoManager {
           String ciphertext = arrayBufferToBase64(iv) + ";" + arrayBufferToBase64(buffer) + ";"
               + arrayBufferToBase64(additionalData);
           callback.onSuccess(ciphertext);
-        }, (Object reason) -> {
+        }, (Throwable reason) -> {
           callback.onFailure(reason);
         });
 
       }
 
-      @Override
-      public void decrypt(String ciphertext, Callback<String, Object> callback) {
+      private Promise<ArrayBuffer, Throwable> decrypt(String ciphertext) {
         String[] cipherparts = ciphertext.split(";", -1);
         ArrayBuffer iv = base64ToArrayBuffer(cipherparts[0]);
         ArrayBuffer data = base64ToArrayBuffer(cipherparts[1]);
         ArrayBuffer additionalData = base64ToArrayBuffer(cipherparts[2]);
         AlgorithmIdentifier algorithm = new AlgorithmIdentifier(CRYPTO_ALGORITHM_NAME, iv, additionalData);
 
-        Crypto.subtle.decrypt(algorithm, cryptoKey, data).then((ArrayBuffer buffer) -> {
+        return Crypto.subtle.decrypt(algorithm, cryptoKey, data);
+      }
+
+      @Override
+      public void decrypt(String ciphertext, Callback<String, Throwable> callback) {
+        decrypt(ciphertext).then((ArrayBuffer buffer) -> {
           callback.onSuccess(arrayBufferToString(buffer));
-        }, (Object reason) -> {
+        }, (Throwable reason) -> {
           callback.onFailure(reason);
         });
       }
+
+      @Override
+      public void decryptAll(Map<Integer, String> ciphertexts, Callback<Map<Integer, String>, Throwable> callback) {
+        Map<Integer, String> map = new HashMap<Integer, String>();
+        for (Entry<Integer, String> ciphertext: ciphertexts.entrySet()) {
+          decrypt(ciphertext.getValue()).then((ArrayBuffer buffer) -> {
+            map.put(ciphertext.getKey(), arrayBufferToString(buffer));
+            if (map.size() >= ciphertexts.size()) {
+              callback.onSuccess(map);
+            }
+          }, (Throwable reason) -> {
+            callback.onFailure(reason);
+          });
+        }
+      }
     };
+  }
+
+  public Cipher getCipher(WaveId waveId) {
+    return getCipher(ModernIdSerialiser.INSTANCE.serialiseWaveId(waveId));
   }
 }

@@ -333,14 +333,14 @@ public class OperationCrypto {
     DocOp obfuscatedDop = cursor.getNewDop(dop);
     String text = cursor.getCollectedText();
     if (!text.isEmpty()) {
-      crypto.getCipher(waveId).encrypt(text, "", new Callback<String, Object>() {
+      crypto.getCipher(waveId).encrypt(text, "", new Callback<String, Throwable>() {
         @Override
         public void onSuccess(String ciphertext) {
           callback.apply(annotate(obfuscatedDop, id, ciphertext));
         }
 
         @Override
-        public void onFailure(Object reason) {
+        public void onFailure(Throwable reason) {
           throw new IllegalStateException(reason.toString());
         }
       });
@@ -366,7 +366,7 @@ public class OperationCrypto {
 
     String ciphertext = dop.getAnnotationBoundary(0).getNewValue(index);
 
-    crypto.getCipher(waveId).decrypt(ciphertext, new Callback<String, Object>() {
+    crypto.getCipher(waveId).decrypt(ciphertext, new Callback<String, Throwable>() {
       @Override
       public void onSuccess(String plaintext) {
         Deobfuscator cursor = new Deobfuscator(plaintext);
@@ -375,7 +375,7 @@ public class OperationCrypto {
       }
 
       @Override
-      public void onFailure(Object reason) {
+      public void onFailure(Throwable reason) {
         throw new IllegalStateException(reason.toString());
       }
     });

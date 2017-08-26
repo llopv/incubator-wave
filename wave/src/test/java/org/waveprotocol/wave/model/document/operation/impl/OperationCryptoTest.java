@@ -21,6 +21,8 @@ package org.waveprotocol.wave.model.document.operation.impl;
 
 import static org.junit.Assert.*;
 
+import java.util.Map;
+
 import org.junit.Test;
 import org.waveprotocol.box.webclient.client.WaveCryptoManager;
 import org.waveprotocol.wave.model.document.operation.DocOp;
@@ -31,13 +33,18 @@ public class OperationCryptoTest {
     public Cipher getCipher(String waveId) {
       return new Cipher() {
         @Override
-        public void encrypt(String plaintext, String additionalData, Callback<String, Object> callback) {
+        public void encrypt(String plaintext, String additionalData, Callback<String, Throwable> callback) {
           callback.onSuccess(plaintext);
         }
 
         @Override
-        public void decrypt(String ciphertext, Callback<String, Object> callback) {
+        public void decrypt(String ciphertext, Callback<String, Throwable> callback) {
           callback.onSuccess(ciphertext);
+        }
+
+        @Override
+        public void decryptAll(Map<Integer, String> ciphertexts, Callback<Map<Integer, String>, Throwable> callback) {
+          callback.onSuccess(ciphertexts);
         }
       };
     }
