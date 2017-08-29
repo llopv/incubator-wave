@@ -31,6 +31,9 @@ import org.waveprotocol.wave.model.id.WaveletName;
 import org.waveprotocol.wave.model.operation.wave.WaveletDelta;
 import org.waveprotocol.wave.model.util.Preconditions;
 import org.waveprotocol.wave.model.version.HashedVersion;
+import org.waveprotocol.wave.model.wave.data.ObservableWaveletData;
+
+import com.google.gwt.core.client.Callback;
 
 import java.util.HashMap;
 import java.util.List;
@@ -323,7 +326,7 @@ public class ViewChannelImpl implements ViewChannel, WaveViewService.OpenCallbac
             if (update.hasWaveletSnapshot()) {
               // it's a snapshot
               openListener.onSnapshot(waveletId, update.getWaveletSnapshot(),
-                  lastCommittedVersion, currentVersion);
+				  lastCommittedVersion, currentVersion);
             } else if (update.hasDeltas() || update.hasLastCommittedVersion() ||
                 update.hasCurrentVersion()) {
               // it's deltas or versions.

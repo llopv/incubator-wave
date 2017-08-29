@@ -30,6 +30,8 @@ import org.waveprotocol.wave.model.operation.wave.WaveletDelta;
 import org.waveprotocol.wave.model.version.HashedVersion;
 import org.waveprotocol.wave.model.wave.data.ObservableWaveletData;
 
+import com.google.gwt.core.client.Callback;
+
 import java.util.List;
 import java.util.Map;
 
