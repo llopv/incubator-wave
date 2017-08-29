@@ -161,35 +161,34 @@ public class ClientFrontendImpl implements ClientFrontend, WaveBus.Subscriber {
         openListener.onFailure("Wave server failure retrieving wavelet");
         return;
       }
-      
-      boolean isEncrypted =  IdUtil.isEncryptedWaveId(waveId) &&
-    		  				 snapshotToSend != null;
-    		  				 
+
+      boolean isEncrypted = IdUtil.isEncryptedWaveId(waveId) && snapshotToSend != null;
+
       RecoverSnapshot encryptedWaveletData = new RecoverSnapshot();
       // Send snapshot encrypted data
       if (isEncrypted) {
-    	      	      	  
-          try {
-        	  
-        	long t0 = System.currentTimeMillis();
-			waveletProvider.getHistory(waveletName, HASHER.createVersionZero(waveletName),
-					  snapshotToSend.snapshot.getHashedVersion(), new Receiver<TransformedWaveletDelta>() {
 
-						@Override
-						public boolean put(TransformedWaveletDelta delta) {
-							 for (WaveletOperation wop : delta) {
-								 encryptedWaveletData.replay(wop);
-							      }
-							 return true;						
-						}        	  
-			  });
-			
-	          long t1 = System.currentTimeMillis();
-	          LOG.info("encrypted snapshot in response ("+ (t1 - t0) +"ms)");
-	          
-		} catch (WaveServerException e) {
-			LOG.warning("Exception building encrypted snapshot: ",e);
-		}
+        try {
+
+          long t0 = System.currentTimeMillis();
+          waveletProvider.getHistory(waveletName, HASHER.createVersionZero(waveletName),
+              snapshotToSend.snapshot.getHashedVersion(), new Receiver<TransformedWaveletDelta>() {
+
+                @Override
+                public boolean put(TransformedWaveletDelta delta) {
+                  for (WaveletOperation wop : delta) {
+                    encryptedWaveletData.replay(wop);
+                  }
+                  return true;
+                }
+              });
+
+          long t1 = System.currentTimeMillis();
+          LOG.info("encrypted snapshot in response (" + (t1 - t0) + "ms)");
+
+        } catch (WaveServerException e) {
+          LOG.warning("Exception building encrypted snapshot: ", e);
+        }
 
       }
       

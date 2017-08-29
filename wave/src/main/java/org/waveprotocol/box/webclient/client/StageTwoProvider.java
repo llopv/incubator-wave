@@ -26,7 +26,6 @@ import org.waveprotocol.wave.client.StageOne;
 import org.waveprotocol.wave.client.StageTwo;
 import org.waveprotocol.wave.client.account.ProfileManager;
 import org.waveprotocol.wave.client.common.util.AsyncHolder;
-import org.waveprotocol.wave.client.common.util.CountdownLatch;
 import org.waveprotocol.wave.concurrencycontrol.channel.WaveViewService;
 import org.waveprotocol.wave.concurrencycontrol.common.UnsavedDataListener;
 import org.waveprotocol.wave.model.id.IdGenerator;
@@ -38,7 +37,6 @@ import org.waveprotocol.wave.model.wave.data.impl.WaveViewDataImpl;
 import org.waveprotocol.wave.model.waveref.WaveRef;
 
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Provides stage 2 of the staged loading of the wave panel
@@ -111,7 +109,7 @@ public class StageTwoProvider extends StageTwo.DefaultProvider {
   protected WaveViewService createWaveViewService() {
     return new RemoteWaveViewService(waveRef.getWaveId(), channel, getDocumentRegistry());
   }
-  
+
   /**
    * Swaps order of open and render.
    */
@@ -126,42 +124,42 @@ public class StageTwoProvider extends StageTwo.DefaultProvider {
       super.install();
       whenReady.use(StageTwoProvider.this);
     } else {
-    	// Workaround to wait for snapshots to be loaded, 
-    	// considering that encrypted wavelet snapshots are processed asynchronously.
-	    WaveViewLoadSyncronizer.init(getWave().getWaveId(), 3, new Command() {
-	
-			@Override
-			public void execute() {
+      // Workaround to wait for snapshots to be loaded,
+      // considering that encrypted wavelet snapshots are processed asynchronously.
+      WaveViewLoadSyncronizer.init(getWave().getWaveId(), 3, new Command() {
 
-				// This code must be kept in sync with the default install()
-			    // method, but excluding the connect() call.
-			
-			    // Install diff control before rendering, because logical diff state
-			    // may
-			    // need to be adjusted due to arbitrary UI policies.
-			    getDiffController().install();
-			
-			    // Ensure the wave is rendered.
-			    stageOne.getDomAsViewProvider().setRenderer(getRenderer());
-			    ensureRendered();
-			
-			    // Install eager UI.
-			    installFeatures();
-			
-			    // Rendering, and therefore the whole stage is now ready.
-			    whenReady.use(StageTwoProvider.this);
-			
-			}
-			
-		});
-	    
+        @Override
+        public void execute() {
+
+          // This code must be kept in sync with the default install()
+          // method, but excluding the connect() call.
+
+          // Install diff control before rendering, because logical diff state
+          // may
+          // need to be adjusted due to arbitrary UI policies.
+          getDiffController().install();
+
+          // Ensure the wave is rendered.
+          stageOne.getDomAsViewProvider().setRenderer(getRenderer());
+          ensureRendered();
+
+          // Install eager UI.
+          installFeatures();
+
+          // Rendering, and therefore the whole stage is now ready.
+          whenReady.use(StageTwoProvider.this);
+
+        }
+
+      });
+
       // For an existing wave, while we're still using the old protocol,
       // rendering must be delayed until the channel is opened, because the
       // initial state snapshots come from the channel.
       getConnector().connect(new Command() {
         @Override
         public void execute() {
-        	WaveViewLoadSyncronizer.tick(getWave().getWaveId());
+          WaveViewLoadSyncronizer.tick(getWave().getWaveId());
         }
       });
     }
@@ -187,5 +185,4 @@ public class StageTwoProvider extends StageTwo.DefaultProvider {
   protected void fetchWave(final AsyncHolder.Accessor<WaveViewData> whenReady) {
     whenReady.use(WaveViewDataImpl.create(waveRef.getWaveId()));
   }
-
 }

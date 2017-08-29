@@ -328,13 +328,13 @@ public class ClientFrontendImplTest extends TestCase {
   private static Boolean isNullMarker() {
     return (Boolean) Mockito.isNull();
   }
-  
+
   private static RecoverSnapshot isNullEncryptedData() {
-	  return (RecoverSnapshot) Mockito.isNull();
+    return (RecoverSnapshot) Mockito.isNull();
   }
-  
+
   private static RecoverSnapshot isAnyEncryptedData() {
-	  return Mockito.any(RecoverSnapshot.class);
+    return Mockito.any(RecoverSnapshot.class);
   }
 
   private static List<TransformedWaveletDelta> isDeltasStartingAt(final long version) {

@@ -158,21 +158,21 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
 
     @Override
     public ObservableWaveletData getWaveletSnapshot() {
-      return snapshot == null ? snapshot = deserialize(waveId, update.getSnapshot(), update.getEncryptedSnapshot(), new Callback<ObservableWaveletData, Exception>() {
+      return snapshot == null ? snapshot = deserialize(waveId, update.getSnapshot(), update.getEncryptedSnapshot(),
+          new Callback<ObservableWaveletData, Exception>() {
 
-			@Override
-			public void onFailure(Exception reason) {
-				LOG.severe("Exception deserializing snaphost", reason);
-			}
+            @Override
+            public void onFailure(Exception reason) {
+              LOG.severe("Exception deserializing snaphost", reason);
+            }
 
-			@Override
-			public void onSuccess(ObservableWaveletData waveletData) {
-				LOG.info("Wavelet "+update.getWaveletName() + " fully loaded!");
-				WaveViewLoadSyncronizer.tick(waveId);
-			}
-			
-		})
-          : snapshot;
+            @Override
+            public void onSuccess(ObservableWaveletData waveletData) {
+              LOG.info("Wavelet " + update.getWaveletName() + " fully loaded!");
+              WaveViewLoadSyncronizer.tick(waveId);
+            }
+
+          }) : snapshot;
     }
 
     @Override
@@ -435,29 +435,31 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
 
     // Wait until all documents has been loaded
     final CountdownLatch syncDocDecrypt = CountdownLatch.create(docEncryptedDataMap.size() + 1, new Command() {
-        @Override
-        public void execute() {
-        	if (onCompleted != null) {
-        		onCompleted.onSuccess(waveletData);
-        	}
+      @Override
+      public void execute() {
+        if (onCompleted != null) {
+          onCompleted.onSuccess(waveletData);
         }
-      });
-    
-    for (DocumentSnapshot docSnapshot : snapshot.getDocument()) {
+      }
+    });
 
+    for (DocumentSnapshot docSnapshot : snapshot.getDocument()) {
       // Deserialize only if there is encrypted data for the doc
-      if (docEncryptedDataMap.containsKey(docSnapshot.getDocumentId()))
-        deserializeEncrypted(waveletData, docSnapshot, docEncryptedDataMap.get(docSnapshot.getDocumentId()), new Command() {
-			@Override
-			public void execute() {
-				syncDocDecrypt.tick();
-			}        	
-        });
-      else
+      if (docEncryptedDataMap.containsKey(docSnapshot.getDocumentId())) {
+        deserializeEncrypted(waveletData, docSnapshot, docEncryptedDataMap.get(docSnapshot.getDocumentId()),
+            new Command() {
+              @Override
+              public void execute() {
+                syncDocDecrypt.tick();
+              }
+            });
+      } else {
         deserialize(waveletData, docSnapshot);
+      }
     }
-    syncDocDecrypt.tick(); // also wait for non encrypted doc processed synchronously
-    
+    syncDocDecrypt.tick(); // also wait for non encrypted doc processed
+                           // synchronously
+
     return waveletData;
   }
 
@@ -476,65 +478,74 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
   }
 
   /**
-   * Deserialize and decrypt a wavelet's encrypted document from a RPC proto object
+   * Deserialize and decrypt a wavelet's encrypted document from a RPC proto
+   * object
    * 
-   * @param waveletData the wavelet data object containing documents
-   * @param docSnapshot proto object having the obfusctated document 
-   * @param documentEncryptedData proto object having the encrypted data of the document
+   * @param waveletData
+   *          the wavelet data object containing documents
+   * @param docSnapshot
+   *          proto object having the obfusctated document
+   * @param documentEncryptedData
+   *          proto object having the encrypted data of the document
    */
-  private static void deserializeEncrypted(WaveletDataImpl waveletData, DocumentSnapshot docSnapshot, DocumentEncryptedData documentEncryptedData, Command onCompleted) {
+  private static void deserializeEncrypted(WaveletDataImpl waveletData, DocumentSnapshot docSnapshot,
+      DocumentEncryptedData documentEncryptedData, Command onCompleted) {
 
-    DocInitialization obfuscatedDocInit =
-          DocOpUtil.asInitialization(WaveletOperationSerializer.deserialize(docSnapshot
-              .getDocumentOperation()));
+    DocInitialization obfuscatedDocInit = DocOpUtil
+        .asInitialization(WaveletOperationSerializer.deserialize(docSnapshot.getDocumentOperation()));
 
-    decryptDocInitialization(waveletData.getWaveId(), obfuscatedDocInit, documentEncryptedData, new Callback<DocInitialization, Throwable>() {
+    decryptDocInitialization(waveletData.getWaveId(), obfuscatedDocInit, documentEncryptedData,
+        new Callback<DocInitialization, Throwable>() {
 
-      @Override
-      public void onFailure(Throwable reason) {
-      	LOG.severe("Exception decrypting snapshot document "+ ModernIdSerialiser.INSTANCE.serialiseWaveletId(waveletData.getWaveletId())+ "/" +docSnapshot.getDocumentId());
-        throw new RuntimeException(reason.toString());
-      }
+          @Override
+          public void onFailure(Throwable reason) {
+            LOG.severe("Exception decrypting snapshot document "
+                + ModernIdSerialiser.INSTANCE.serialiseWaveletId(waveletData.getWaveletId()) + "/"
+                + docSnapshot.getDocumentId());
+            throw new RuntimeException(reason.toString());
+          }
 
-      @Override
-      public void onSuccess(DocInitialization decryptedDocInit) {
-    	  
-    	LOG.info("Successfully decrypted snapshot document "+ ModernIdSerialiser.INSTANCE.serialiseWaveletId(waveletData.getWaveletId())+ "/" +docSnapshot.getDocumentId());
-    	
-        String docId = docSnapshot.getDocumentId();
-        ParticipantId author = ParticipantId.ofUnsafe(docSnapshot.getAuthor());
-        List<ParticipantId> contributors = Lists.newArrayList();
-        for (String contributor : docSnapshot.getContributor()) {
-          contributors.add(ParticipantId.ofUnsafe(contributor));
-        }
-        long lmt = docSnapshot.getLastModifiedTime();
-        long lmv = docSnapshot.getLastModifiedVersion();
-        waveletData.createDocument(docId, author, contributors, decryptedDocInit, lmt, lmv);
-        if (onCompleted != null)
-        	onCompleted.execute();
-      }
-  	});
-	}
+          @Override
+          public void onSuccess(DocInitialization decryptedDocInit) {
+
+            LOG.info("Successfully decrypted snapshot document "
+                + ModernIdSerialiser.INSTANCE.serialiseWaveletId(waveletData.getWaveletId()) + "/"
+                + docSnapshot.getDocumentId());
+
+            String docId = docSnapshot.getDocumentId();
+            ParticipantId author = ParticipantId.ofUnsafe(docSnapshot.getAuthor());
+            List<ParticipantId> contributors = Lists.newArrayList();
+            for (String contributor : docSnapshot.getContributor()) {
+              contributors.add(ParticipantId.ofUnsafe(contributor));
+            }
+            long lmt = docSnapshot.getLastModifiedTime();
+            long lmv = docSnapshot.getLastModifiedVersion();
+            waveletData.createDocument(docId, author, contributors, decryptedDocInit, lmt, lmv);
+            if (onCompleted != null)
+              onCompleted.execute();
+          }
+        });
+  }
 
   /**
    * Decrypt operations of a document initialization using encrypted data of the
    * document.
    * 
-   * @param encryptedContent
-   * @param decryptedDocData
+   * @param obfuscatedContent
+   * @param encryptedData
    * @return
    */
-  private static void decryptDocInitialization(WaveId waveId, DocInitialization encryptedContent,
-      DocumentEncryptedData decryptedDocData, Callback<DocInitialization, Throwable> callback) {
-	 
-	// no cipher texts => nothing to decrypt  
-	if (decryptedDocData.getCipherText().size() == 0) {
-		callback.onSuccess(encryptedContent);
-	}	
-	  
+  private static void decryptDocInitialization(WaveId waveId, DocInitialization obfuscatedContent,
+      DocumentEncryptedData encryptedData, Callback<DocInitialization, Throwable> callback) {
+
+    // no cipher texts => nothing to decrypt
+    if (encryptedData.getCipherText().size() == 0) {
+      callback.onSuccess(obfuscatedContent);
+    }
+
     Cipher cipher = WaveCryptoManager.get().getCipher(waveId);
     Map<Integer, String> ciphertexts = new HashMap<Integer, String>();
-    for (CipherText ciphertext: decryptedDocData.getCipherText()) {
+    for (CipherText ciphertext : encryptedData.getCipherText()) {
       ciphertexts.put((int) ciphertext.getIndex(), ciphertext.getCiphertext());
     }
 
@@ -548,19 +559,19 @@ public final class RemoteWaveViewService implements WaveViewService, WaveWebSock
       @Override
       public void onSuccess(Map<Integer, String> texts) {
         String text = "";
-        for (CipherPiece piece : decryptedDocData.getCipherPart()) {
+        for (CipherPiece piece : encryptedData.getCipherPiece()) {
           text += texts.get(piece.getOp()).substring(piece.getOffset(), piece.getOffset() + piece.getLength());
         }
 
         DocInitializationBuffer buffer = new DocInitializationBuffer();
         int offset = 0;
-        for (int i = 0; i < encryptedContent.size(); i++) {
-          if (encryptedContent.getType(i) == DocOpComponentType.CHARACTERS) {
-            int len = encryptedContent.getCharactersString(i).length();
+        for (int i = 0; i < obfuscatedContent.size(); i++) {
+          if (obfuscatedContent.getType(i) == DocOpComponentType.CHARACTERS) {
+            int len = obfuscatedContent.getCharactersString(i).length();
             buffer.characters(text.substring(offset, offset + len));
             offset += len;
           } else {
-            encryptedContent.applyComponent(i, buffer);
+            obfuscatedContent.applyComponent(i, buffer);
           }
         }
         callback.onSuccess(buffer.finish());

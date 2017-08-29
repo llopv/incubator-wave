@@ -139,21 +139,21 @@ message WaveViewSnapshot {
 //
 
 message CipherText {
-	required int64 index = 1;
-	required string ciphertext = 2;
+  required int64 index = 1;
+  required string ciphertext = 2;
 }
 
 message CipherPiece {
-	required int64 index = 1;
-	required int32 op = 2;
-	required int32 length = 3;
-	required int32 offset = 4;
+  required int64 index = 1;
+  required int32 op = 2;
+  required int32 length = 3;
+  required int32 offset = 4;
 }
 
 message DocumentEncryptedData {
   required string document_id = 1;
   repeated CipherText cipher_text = 2;
-  repeated CipherPiece cipher_part = 3;
+  repeated CipherPiece cipher_piece = 3;
 }
 
 message WaveletEncryptedData {
