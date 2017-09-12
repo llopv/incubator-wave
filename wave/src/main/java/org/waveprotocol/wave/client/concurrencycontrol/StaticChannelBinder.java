@@ -82,10 +82,14 @@ public final class StaticChannelBinder {
       @Override
       public void consume(WaveletOperation op) {
         if (waveId.split("/")[1].startsWith(IdConstants.ENCRYPTED_WAVE_PREFIX)) {
-          OperationCrypto.decrypt(waveId, op, (WaveletOperation decryptedOp) -> {
-            target.consume(decryptedOp);
-            return null;
-          });
+          try {
+            OperationCrypto.decrypt(waveId, op, (WaveletOperation decryptedOp) -> {
+              target.consume(decryptedOp);
+              return null;
+            });
+          } catch(Exception e) {
+            throw new Error(e.getMessage());
+          }
         } else {
           target.consume(op);
         }

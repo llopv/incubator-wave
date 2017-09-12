@@ -221,7 +221,8 @@ public class OperationCrypto {
    *          wavelet operation
    * @param callback
    */
-  public static void decrypt(String waveId, WaveletOperation op, final Function<WaveletOperation, Void> callback) {
+  public static void decrypt(String waveId, WaveletOperation op, final Function<WaveletOperation, Void> callback)
+      throws Exception {
     CipherWrapper wrapper = new CipherWrapper();
     DocOp dop = wrapper.unwrap(op);
     if (dop == null) {
@@ -356,10 +357,18 @@ public class OperationCrypto {
    * @param dop
    * @param callback
    */
-  public static void decrypt(String waveId, DocOp dop, final Function<DocOp, Void> callback) {
+  public static void decrypt(String waveId, DocOp dop, final Function<DocOp, Void> callback) throws Exception {
 
     int index = cipherIndex(dop);
+
+    // No cipher/* annotation?
     if (index < 0) {
+      for (int i = 0; i < dop.size(); i++) {
+        if (dop.getType(i) == DocOpComponentType.CHARACTERS) {
+          throw new Exception("The operation contains unencrypted text");
+        }
+      }
+      // No text components found
       callback.apply(dop);
       return;
     }
