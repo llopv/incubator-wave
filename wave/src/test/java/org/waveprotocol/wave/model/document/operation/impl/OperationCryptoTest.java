@@ -54,10 +54,15 @@ public class OperationCryptoTest {
     OperationCrypto.crypto = new WaveCryptoManagerMock();
     OperationCrypto.encrypt("XXX", dop, "0", (DocOp encrypted) -> {
       assertEquals(expectedCiphertext, DocOpUtil.toConciseString(encrypted));
-      OperationCrypto.decrypt("XXX", encrypted, (DocOp decrypted) -> {
-        assertEquals(expectedPlaintext, DocOpUtil.toConciseString(decrypted));
-        return null;
-      });
+      try {
+        OperationCrypto.decrypt("XXX", encrypted, (DocOp decrypted) -> {
+          assertEquals(expectedPlaintext, DocOpUtil.toConciseString(decrypted));
+          return null;
+        });
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
       return null;
     });
   }
